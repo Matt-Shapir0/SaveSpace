@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from app.database import get_supabase
+from fastapi import HTTPException
 
 router = APIRouter()
 
@@ -12,4 +13,4 @@ def health_check():
         db.table("videos").select("id").limit(1).execute()
         return {"status": "ok", "database": "connected"}
     except Exception as e:
-        return {"status": "error", "database": str(e)}
+        raise HTTPException(status_code=503, detail="database unavailable")
