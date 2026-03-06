@@ -199,13 +199,19 @@ def _download_video(url, tmpdir):
 
 def transcribe_with_google(audio_path: str):
 
-    credentials = service_account.Credentials.from_service_account_file(
-      "service_account.json"
-    )
-    print("\nCREDZZ:\n", credentials)
-    client = speech.SpeechClient(credentials=credentials)
-    with open(audio_path, "rb") as f:
-        audio_content = f.read()
+    if "GOOGLE_SERVICE_ACCOUNT_JSON" in os.environ:
+        service_account_info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+        credentials = service_account.Credentials.from_service_account_info(
+            service_account_info
+        )
+    else:
+        credentials = service_account.Credentials.from_service_account_file(
+            "service_account.json"
+        )
+
+        client = speech.SpeechClient(credentials=credentials)
+        with open(audio_path, "rb") as f:
+            audio_content = f.read()
 
     audio = speech.RecognitionAudio(content=audio_content)
 
