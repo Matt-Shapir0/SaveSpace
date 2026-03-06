@@ -89,98 +89,42 @@ def _sample_frames(video_path: str, num_frames: int) -> list:
     cap.release()
     return frames
 
+
 def _ocr_frame(frame) -> Optional[str]:
     """
-    Run OCR on a frame with preprocessing tuned for TikTok-style overlays.
-    This significantly improves OCR accuracy.
+    Run OCR on a single frame.
+    Preprocesses for better accuracy on video text overlays.
     """
-
-    # Convert BGR -> RGB
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    h, w, _ = rgb.shape
-
-    # --- 1. Crop to likely caption region (middle-bottom of frame) ---
-    # TikTok text overlays usually appear here
-    cropped = rgb[int(h * 0.35):int(h * 0.9), :]
-
-    # --- 2. Convert to grayscale ---
-    gray = cv2.cvtColor(cropped, cv2.COLOR_RGB2GRAY)
-
-    # --- 3. Upscale image (small video text becomes readable) ---
-    gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-
-    # --- 4. Denoise ---
-    gray = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    # --- 5. Adaptive threshold (VERY important for video text) ---
-    thresh = cv2.adaptiveThreshold(
-        gray,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        11,
-        2
-    )
-
-    # --- 6. Morphological close to connect letters ---
-    kernel = np.ones((3, 3), np.uint8)
-    processed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-
-    # Convert to PIL for pytesseract
-    pil_image = Image.fromarray(processed)
-
+    # Convert from BGR (OpenCV) to RGB (PIL)
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    pil_image = Image.fromarray(rgb_frame)
+    
+    # Preprocessing to improve OCR on video text:
+    # 1. Scale up (text in videos is often small)
+    width, height = pil_image.size
+    pil_image = pil_image.resize((width * 2, height * 2), Image.LANCZOS)
+    
+    # 2. Convert to grayscale
+    gray = pil_image.convert("L")
+    
+    # 3. Increase contrast
+    import PIL.ImageEnhance as enhance
+    gray = enhance.Contrast(gray).enhance(2.0)
+    
+    # Run Tesseract OCR
     try:
         text = pytesseract.image_to_string(
-            pil_image,
-            config="--oem 3 --psm 6"
+            gray,
+            config="--psm 3 --oem 3"  # psm 3 = auto page segmentation
         ).strip()
-
+        
+        # Filter out very short or noisy results
         if len(text) < 5:
             return None
-
+        
+        # Remove excessive whitespace
         text = " ".join(text.split())
         return text
-
     except Exception as e:
         print(f"OCR error on frame: {e}")
         return None
-
-# def _ocr_frame(frame) -> Optional[str]:
-#     """
-#     Run OCR on a single frame.
-#     Preprocesses for better accuracy on video text overlays.
-#     """
-#     # Convert from BGR (OpenCV) to RGB (PIL)
-#     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-#     pil_image = Image.fromarray(rgb_frame)
-    
-#     # Preprocessing to improve OCR on video text:
-#     # 1. Scale up (text in videos is often small)
-#     width, height = pil_image.size
-#     pil_image = pil_image.resize((width * 2, height * 2), Image.LANCZOS)
-    
-#     # 2. Convert to grayscale
-#     gray = pil_image.convert("L")
-    
-#     # 3. Increase contrast
-#     import PIL.ImageEnhance as enhance
-#     gray = enhance.Contrast(gray).enhance(2.0)
-    
-#     # Run Tesseract OCR
-#     try:
-#         text = pytesseract.image_to_string(
-#             gray,
-#             config="--psm 3 --oem 3"  # psm 3 = auto page segmentation
-#         ).strip()
-        
-#         # Filter out very short or noisy results
-#         if len(text) < 5:
-#             return None
-        
-#         # Remove excessive whitespace
-#         text = " ".join(text.split())
-#         return text
-#     except Exception as e:
-#         print(f"OCR error on frame: {e}")
-#         return None

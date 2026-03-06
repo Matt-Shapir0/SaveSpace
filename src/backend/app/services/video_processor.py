@@ -43,7 +43,7 @@ def process_video(video_id: str, url: str, user_id: str) -> dict:
         print(f"[{video_id}] Running OCR on video frames...")
         ocr_text = None
         try:
-            ocr_text = extract_text_from_frames(url, num_frames=6)
+            ocr_text = extract_text_from_frames(url, num_frames=2)
             print(f"[{video_id}] OCR text found: {'Yes' if ocr_text else 'No'}")
         except Exception as e:
             print(f"[{video_id}] OCR failed (non-fatal): {e}")
