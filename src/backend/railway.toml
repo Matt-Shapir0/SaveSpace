@@ -4,6 +4,5 @@ builder = "NIXPACKS"
 [deploy]
 startCommand = "celery -A app.worker.tasks.celery_app worker --loglevel=info --concurrency=1 & python -m http.server $PORT"
 healthcheckPath = "/"
-healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
