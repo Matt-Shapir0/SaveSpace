@@ -1,2 +1,22 @@
 .env
 service_account.json
+
+# Python temp files
+__pycache__/
+*.pyc
+
+# Node modules
+node_modules
+
+# Environments
+.env
+.venv
+venv/
+
+# Mac / OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
