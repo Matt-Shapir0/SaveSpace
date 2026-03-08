@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, Heart } from "lucide-react";
+import { chatApi, type ChatMessage } from "../lib/api";
+import { useUser } from "../lib/useUser";
 
 type Message = {
   id: string;
@@ -8,14 +10,13 @@ type Message = {
   timestamp: Date;
 };
 
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    role: "assistant",
-    content: "Hey, I'm here for you. Whether you need to vent, celebrate a win, or just think out loud - this is your space. What's on your mind?",
-    timestamp: new Date(),
-  },
-];
+const INITIAL_MESSAGE: Message = {
+  id: "1",
+  role: "assistant",
+  content:
+    "Hey, I'm here for you. Whether you need to vent, celebrate a win, or just think out loud — this is your space. What's on your mind?",
+  timestamp: new Date(),
+};
 
 const suggestionPrompts = [
   "I'm feeling overwhelmed today",
@@ -25,57 +26,59 @@ const suggestionPrompts = [
 ];
 
 export function Chat() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const { userId } = useUser();
+  const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = async (message: string) => {
-    if (!message.trim()) return;
+  const handleSend = async (text: string) => {
+    if (!text.trim() || isTyping) return;
+    setError(null);
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: message,
+      content: text,
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInput("");
     setIsTyping(true);
 
-    // Simulate friend-like responses
-    setTimeout(() => {
-      const responses = [
-        "I hear you. It makes total sense to feel that way. Remember, you've been saving reminders about being gentle with yourself - maybe that's what you need right now? 💙",
-        "That's amazing! Seriously, even small wins matter. I saw you saved something the other day about celebrating progress, not just perfection. This totally counts.",
-        "You know what? Looking at your saved content, I notice you've been drawn to posts about inner strength lately. Maybe part of you already knows you're more capable than you're giving yourself credit for.",
-        "I get it. Some days are just hard. But I've seen what you save - posts about resilience, about showing up even when it's tough. You're collecting these reminders because they matter to you. Let that sink in.",
-        "Here's what I see: you've been saving content about growth and self-compassion. That tells me you're working on something meaningful. It's okay if it doesn't all come together at once.",
-      ];
+    try {
+      // Build the history to send to the backend.
+      // We skip the initial assistant greeting so the LLM doesn't
+      // think it already introduced itself weirdly.
+      const history: ChatMessage[] = updatedMessages
+        .slice(1) // drop the hardcoded welcome message
+        .map((m) => ({ role: m.role, content: m.content }));
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: responses[Math.floor(Math.random() * responses.length)],
-        timestamp: new Date(),
-      };
+      const { reply } = await chatApi.send(history, userId);
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: reply,
+          timestamp: new Date(),
+        },
+      ]);
+    } catch (e) {
+      setError("Couldn't reach the server. Check your connection and try again.");
+      // Remove the user message so they can retry
+      setMessages((prev) => prev.filter((m) => m.id !== userMessage.id));
+    } finally {
       setIsTyping(false);
-    }, 1500);
-  };
-
-  const handleSuggestionClick = (prompt: string) => {
-    handleSend(prompt);
+    }
   };
 
   return (
@@ -124,13 +127,22 @@ export function Chat() {
           </div>
         )}
 
+        {error && (
+          <div className="flex justify-center">
+            <p className="text-xs text-destructive bg-destructive/10 px-4 py-2 rounded-2xl">
+              {error}
+            </p>
+          </div>
+        )}
+
+        {/* Suggestion prompts — only show when conversation just started */}
         {messages.length === 1 && (
           <div className="space-y-2 mt-4">
             <p className="text-sm text-muted-foreground px-2">Try saying:</p>
             {suggestionPrompts.map((prompt, index) => (
               <button
                 key={index}
-                onClick={() => handleSuggestionClick(prompt)}
+                onClick={() => handleSend(prompt)}
                 className="w-full text-left bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-2xl px-4 py-3 text-sm transition-colors"
               >
                 {prompt}
