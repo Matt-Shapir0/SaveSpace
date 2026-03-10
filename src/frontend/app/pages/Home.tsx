@@ -1,165 +1,222 @@
+// src/frontend/app/pages/Home.tsx
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { Play, Calendar, Sparkles, TrendingUp } from "lucide-react";
+import { Play, Sparkles, TrendingUp, Plus, Loader2, AlertCircle } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
-import { themeColors, type ThemeId } from "../lib/themes";
+import { videosApi, type Video } from "../lib/api";
+import { useUser } from "../lib/useUser";
 
-const mockPodcasts = [
-  {
-    id: "1",
-    title: "Your Weekly Reinforcement",
-    date: "Mar 1, 2026",
-    duration: "18 min",
-    themes: ["growth", "selfcare"] as ThemeId[],
-    coverImage: "https://images.unsplash.com/photo-1758874572918-178c7f8e74df?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwZXJzb24lMjBsaXN0ZW5pbmclMjBoZWFkcGhvbmVzJTIwY2FsbXxlbnwxfHx8fDE3NzIzOTYxOTR8MA&ixlib=rb-4.1.0&q=80&w=1080",
-    excerpt: "This week's episode draws from 12 posts you saved about building resilience and self-compassion.",
-  },
-  {
-    id: "2",
-    title: "Finding Your Motivation",
-    date: "Feb 23, 2026",
-    duration: "22 min",
-    themes: ["motivation", "confidence"] as ThemeId[],
-    coverImage: "https://images.unsplash.com/photo-1745970347554-854e886c5685?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxncm93dGglMjBtaW5kc2V0JTIwcGxhbnRzfGVufDF8fHx8MTc3MjM5NjE5NHww&ixlib=rb-4.1.0&q=80&w=1080",
-    excerpt: "Built from insights you saved about staying consistent with your goals.",
-  },
+// Cover images rotate based on video index — purely cosmetic until
+// real episode cover art is generated.
+const COVER_IMAGES = [
+  "https://images.unsplash.com/photo-1758874572918-178c7f8e74df?w=400&q=80",
+  "https://images.unsplash.com/photo-1745970347554-854e886c5685?w=400&q=80",
+  "https://images.unsplash.com/photo-1761590206515-1816e5123df9?w=400&q=80",
 ];
 
-const todaysFeatured = {
-  id: "daily",
-  title: "Today's Focus: Building Resilience",
-  description: "Based on your interests in personal growth and mindfulness",
-  duration: "12 min",
-  coverImage: "https://images.unsplash.com/photo-1745970347554-854e886c5685?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxncm93dGglMjBtaW5kc2V0JTIwcGxhbnRzfGVufDF8fHx8MTc3MjM5NjE5NHww&ixlib=rb-4.1.0&q=80&w=1080",
-  themes: ["growth", "mindfulness"] as ThemeId[],
-};
+function getStatusBadge(status: Video["status"]) {
+  switch (status) {
+    case "pending":
+      return <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">Queued</span>;
+    case "processing":
+      return <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />Processing</span>;
+    case "done":
+      return <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Ready</span>;
+    case "failed":
+      return <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Failed</span>;
+  }
+}
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
 
 export function Home() {
+  const { userId } = useUser();
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [submitUrl, setSubmitUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [showInput, setShowInput] = useState(false);
+
+  const fetchVideos = async () => {
+    try {
+      const data = await videosApi.getByUser(userId);
+      setVideos(data);
+    } catch (e) {
+      setError("Couldn't load your saved videos.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchVideos();
+    // Poll every 8 seconds to pick up status changes (pending → done)
+    const interval = setInterval(fetchVideos, 10000);
+    return () => clearInterval(interval);
+  }, [userId]);
+
+  const handleSubmit = async () => {
+    if (!submitUrl.trim()) return;
+    setSubmitting(true);
+    try {
+      await videosApi.submit(submitUrl.trim(), userId);
+      setSubmitUrl("");
+      setShowInput(false);
+      await fetchVideos();
+    } catch (e) {
+      setError("Couldn't save that URL. Check it and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const today = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
   return (
     <div className="min-h-screen">
-      {/* Hero Section */}
-      <div className="relative h-64 overflow-hidden">
-        <ImageWithFallback 
-          src="https://images.unsplash.com/photo-1761590206515-1816e5123df9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwZWFjZWZ1bCUyMG1vcm5pbmclMjBjb2ZmZWUlMjBqb3VybmFsfGVufDF8fHx8MTc3MjM5NjE5NHww&ixlib=rb-4.1.0&q=80&w=1080"
-          alt="Morning inspiration"
+      {/* Hero */}
+      <div className="relative h-56 overflow-hidden">
+        <ImageWithFallback
+          src={COVER_IMAGES[0]}
+          alt="Morning"
           className="w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
         <div className="absolute bottom-6 left-6 right-6">
-          <h1 className="text-3xl mb-2 text-foreground">Good morning</h1>
-          <p className="text-foreground/80">Sunday, March 1</p>
+          <h1 className="text-3xl mb-1 text-foreground">{getGreeting()}</h1>
+          <p className="text-foreground/80 text-sm">{today}</p>
         </div>
       </div>
 
-      {/* Today's Featured */}
-      <div className="px-6 py-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Sparkles className="w-5 h-5 text-primary" />
-          <h2>Featured for You Today</h2>
-        </div>
-
-        <Link
-          to={`/podcast/${todaysFeatured.id}`}
-          className="block bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-3xl overflow-hidden border border-primary/20 hover:border-primary/40 transition-all"
-        >
-          <div className="flex gap-4 p-5">
-            <div className="relative w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0 bg-secondary">
-              <ImageWithFallback 
-                src={todaysFeatured.coverImage}
-                alt={todaysFeatured.title}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                <div className="bg-primary rounded-full p-2.5">
-                  <Play className="w-6 h-6 text-primary-foreground fill-current" />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <h3 className="mb-1.5">{todaysFeatured.title}</h3>
-              <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
-                {todaysFeatured.description}
-              </p>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Calendar className="w-3.5 h-3.5" />
-                <span>{todaysFeatured.duration}</span>
-              </div>
-            </div>
+      {/* Add Video */}
+      <div className="px-6 pt-6 pb-2">
+        {showInput ? (
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={submitUrl}
+              onChange={(e) => setSubmitUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              placeholder="Paste a TikTok or Reel URL…"
+              autoFocus
+              className="flex-1 bg-card border border-border rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring/20"
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || !submitUrl.trim()}
+              className="bg-primary text-primary-foreground rounded-2xl px-4 py-3 text-sm disabled:opacity-50"
+            >
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+            </button>
+            <button
+              onClick={() => setShowInput(false)}
+              className="text-muted-foreground px-3 text-sm"
+            >
+              Cancel
+            </button>
           </div>
-        </Link>
-      </div>
-
-      {/* Personalized Recommendations */}
-      <div className="px-6 pb-4">
-        <div className="bg-card rounded-3xl p-5 border border-border/50">
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingUp className="w-5 h-5 text-primary" />
-            <h3>Your Growth This Week</h3>
-          </div>
-          <p className="text-sm text-muted-foreground mb-4">
-            You've saved 8 posts about resilience and 5 about mindfulness. Your focus is shifting toward inner strength.
-          </p>
-          <Link
-            to="/profile"
-            className="text-sm text-primary flex items-center gap-1"
+        ) : (
+          <button
+            onClick={() => setShowInput(true)}
+            className="w-full flex items-center gap-3 bg-primary/10 hover:bg-primary/15 border border-primary/20 rounded-2xl px-5 py-4 transition-colors"
           >
-            See your insights
-            <Sparkles className="w-4 h-4" />
-          </Link>
-        </div>
+            <div className="bg-primary rounded-full p-1">
+              <Plus className="w-4 h-4 text-primary-foreground" />
+            </div>
+            <span className="text-sm text-primary">Save a TikTok or Reel URL</span>
+          </button>
+        )}
       </div>
 
-      {/* Recent Episodes */}
+      {/* Error banner */}
+      {error && (
+        <div className="mx-6 mt-3 flex items-center gap-2 bg-destructive/10 text-destructive rounded-2xl px-4 py-3 text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {/* Growth snapshot */}
+      {videos.length > 0 && (
+        <div className="px-6 py-4">
+          <div className="bg-card rounded-3xl p-5 border border-border/50">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="w-5 h-5 text-primary" />
+              <h3>Your Library</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {videos.filter((v) => v.status === "done").length} of {videos.length} videos processed
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Saved Videos */}
       <div className="px-6 pb-8">
         <div className="flex items-center justify-between mb-4">
-          <h2>Recent Episodes</h2>
-          <Link to="/library?tab=timeline" className="text-sm text-primary">
+          <h2>Saved Videos</h2>
+          <Link to="/library" className="text-sm text-primary">
             View all
           </Link>
         </div>
 
-        <div className="space-y-4">
-          {mockPodcasts.map((podcast) => (
-            <Link
-              key={podcast.id}
-              to={`/podcast/${podcast.id}`}
-              state={{ from: '/' }}
-              className="block bg-card rounded-3xl overflow-hidden border border-border/50 hover:border-primary/30 transition-all"
-            >
-              <div className="flex gap-4 p-4">
-                <div className="relative w-20 h-20 rounded-2xl overflow-hidden flex-shrink-0 bg-secondary">
-                  <ImageWithFallback 
-                    src={podcast.coverImage}
-                    alt={podcast.title}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                    <div className="bg-primary rounded-full p-2">
-                      <Play className="w-4 h-4 text-primary-foreground fill-current" />
-                    </div>
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : videos.length === 0 ? (
+          <div className="text-center py-12 space-y-3">
+            <div className="text-4xl">🎬</div>
+            <p className="text-muted-foreground text-sm">
+              No saved videos yet. Paste a TikTok or Reel URL above to get started.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {videos.slice(0, 10).map((video, i) => (
+              <div
+                key={video.id}
+                className="bg-card rounded-3xl overflow-hidden border border-border/50"
+              >
+                <div className="flex gap-4 p-4">
+                  <div className="relative w-20 h-20 rounded-2xl overflow-hidden flex-shrink-0 bg-secondary">
+                    <ImageWithFallback
+                      src={COVER_IMAGES[i % COVER_IMAGES.length]}
+                      alt="video"
+                      className="w-full h-full object-cover"
+                    />
                   </div>
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <h3 className="mb-1 truncate text-base">{podcast.title}</h3>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    {podcast.date} · {podcast.duration}
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {podcast.themes.slice(0, 2).map((themeId) => (
-                      <span
-                        key={themeId}
-                        className={`text-xs ${themeColors[themeId].bg} ${themeColors[themeId].border} border px-2 py-1 rounded-lg`}
-                      >
-                        {themeColors[themeId].icon} {themeColors[themeId].name}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      {getStatusBadge(video.status)}
+                      <span className="text-xs text-muted-foreground capitalize">
+                        {video.source || "video"}
                       </span>
-                    ))}
+                    </div>
+                    <p className="text-sm line-clamp-2 text-muted-foreground mt-1">
+                      {video.caption || video.url}
+                    </p>
+                    {video.status === "done" && video.transcript && (
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-1 italic">
+                        "{video.transcript.slice(0, 80)}…"
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
-            </Link>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

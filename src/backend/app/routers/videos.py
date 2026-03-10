@@ -20,15 +20,32 @@ def detect_source(url: str) -> str:
         return "unknown"
 
 @router.post("/", response_model=VideoResponse, status_code=202)
-async def create_video(payload: VideoCreate, background_tasks: BackgroundTasks):
-    """
-    Accept a video URL and queue it for processing.
-    Returns 202 Accepted immediately — processing happens in the background.
-    """   
+async def create_video(payload: VideoCreate):
     db = get_supabase()
     source = detect_source(payload.url)
 
-    # Insert the video record with status 'pending'
+    # Check if video already exists
+    existing = (
+        db.table("videos")
+        .select("*")
+        .eq("url", payload.url)
+        .limit(1)
+        .execute()
+    )
+
+    if existing.data:
+        v = existing.data[0]
+        return VideoResponse(
+            id=v["id"],
+            url=v["url"],
+            status=v["status"],
+            source=v.get("source"),
+            transcript=v.get("transcript"),
+            caption=v.get("caption"),
+            created_at=v.get("created_at"),
+        )
+
+    # Otherwise create a new video
     result = db.table("videos").insert({
         "user_id": payload.user_id,
         "url": payload.url,
@@ -42,9 +59,6 @@ async def create_video(payload: VideoCreate, background_tasks: BackgroundTasks):
     video = result.data[0]
     video_id = video["id"]
 
-    # Queue the processing job as a background task
-    # (In Step 5 we upgrade this to Celery — for now BackgroundTasks works for testing)
-    # background_tasks.add_task(process_video_task, video_id, payload.url, payload.user_id)
     process_video_task.delay(video_id, payload.url, payload.user_id)
 
     return VideoResponse(
