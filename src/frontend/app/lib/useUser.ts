@@ -7,6 +7,9 @@ import { useState, useEffect } from "react";
 
 const USER_ID_KEY = "echofeed_user_id";
 
+// TEMP: hardcoded dev user that exists in Supabase
+const DEV_USER_ID = "f3c22ac3-066c-4dc2-a75d-dc272db886b1";
+
 function getOrCreateUserId(): string {
   let id = localStorage.getItem(USER_ID_KEY);
   if (!id) {
@@ -14,7 +17,7 @@ function getOrCreateUserId(): string {
     id = crypto.randomUUID();
     localStorage.setItem(USER_ID_KEY, id);
   }
-  return id;
+  return DEV_USER_ID;
 }
 
 export function useUser() {
