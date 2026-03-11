@@ -1,26 +1,12 @@
-// Manages a simple user identity stored in localStorage.
-// This is a temporary stand-in until Supabase Auth is wired up.
-// When add real auth, swap this hook's internals — all pages!!
-// that call useUser() will automatically get the real user ID.
+// Every page that called useUser() before now gets the real user ID for free.
 
-import { useState, useEffect } from "react";
-
-const USER_ID_KEY = "echofeed_user_id";
-
-// TEMP: hardcoded dev user that exists in Supabase
-const DEV_USER_ID = "f3c22ac3-066c-4dc2-a75d-dc272db886b1";
-
-function getOrCreateUserId(): string {
-  let id = localStorage.getItem(USER_ID_KEY);
-  if (!id) {
-    // Generate a UUID-like ID for this device
-    id = crypto.randomUUID();
-    localStorage.setItem(USER_ID_KEY, id);
-  }
-  return DEV_USER_ID;
-}
+import { useAuth } from "./useAuth";
 
 export function useUser() {
-  const [userId] = useState<string>(getOrCreateUserId);
-  return { userId };
+  const { user, loading } = useAuth();
+  return {
+    userId: user?.id ?? null,
+    email: user?.email ?? null,
+    loading,
+  };
 }

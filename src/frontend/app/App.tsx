@@ -1,35 +1,48 @@
+// Auth flow:
+// 1. Loading → spinner
+// 2. Not signed in → AuthScreen
+// 3. Signed in, no profile → Onboarding
+// 4. Signed in, has profile → Main app
+
 import { useState, useEffect } from "react";
 import { RouterProvider } from "react-router";
 import { router } from "./routes";
 import { Onboarding } from "./components/Onboarding";
+import { AuthScreen } from "./components/AuthScreen";
+import { useAuth } from "./lib/useAuth";
 import { profilesApi, type UserPreferences } from "./lib/api";
-import { useUser } from "./lib/useUser";
+import { Loader2 } from "lucide-react";
 
 export default function App() {
-  const { userId } = useUser();
-  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
+  const { user, loading: authLoading } = useAuth();
+  const [hasProfile, setHasProfile] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("userPreferences");
-    if (saved) setHasCompletedOnboarding(true);
-  }, []);
+    if (!user) { setHasProfile(null); return; }
+    const local = localStorage.getItem(`echofeed_profile_${user.id}`);
+    if (local) { setHasProfile(true); return; }
+    profilesApi.get(user.id)
+      .then(() => { localStorage.setItem(`echofeed_profile_${user.id}`, "1"); setHasProfile(true); })
+      .catch(() => setHasProfile(false));
+  }, [user?.id]);
 
   const handleOnboardingComplete = async (prefs: UserPreferences) => {
-    // Save locally so we don't re-show onboarding on refresh
+    if (!user) return;
+    localStorage.setItem(`echofeed_profile_${user.id}`, "1");
     localStorage.setItem("userPreferences", JSON.stringify(prefs));
-    setHasCompletedOnboarding(true);
-
-    // Save to backend (non-blocking — don't fail onboarding if API is down)
-    try {
-      await profilesApi.save(userId, prefs);
-    } catch (e) {
-      console.warn("Could not save preferences to backend:", e);
-    }
+    setHasProfile(true);
+    try { await profilesApi.save(user.id, prefs); }
+    catch (e) { console.warn("Could not save profile:", e); }
   };
 
-  if (!hasCompletedOnboarding) {
-    return <Onboarding onComplete={handleOnboardingComplete} />;
+  if (authLoading || (user && hasProfile === null)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
-
+  if (!user) return <AuthScreen onAuth={() => {}} />;
+  if (!hasProfile) return <Onboarding onComplete={handleOnboardingComplete} />;
   return <RouterProvider router={router} />;
 }

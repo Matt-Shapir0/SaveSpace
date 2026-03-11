@@ -1,5 +1,4 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-console.log("ENV API:", import.meta.env.VITE_API_URL);
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -8,36 +7,18 @@ class ApiError extends Error {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = `${API_URL}${path}`;
-
-  console.log("API REQUEST:", url, options);
-
-  try {
-    const res = await fetch(url, {
-      headers: { "Content-Type": "application/json" },
-      ...options,
-    });
-
-    console.log("API RESPONSE STATUS:", res.status);
-
-    if (!res.ok) {
-      const text = await res.text();
-      console.error("API ERROR RESPONSE:", text);
-      throw new ApiError(res.status, text);
-    }
-
-    const data = await res.json();
-    console.log("API RESPONSE DATA:", data);
-
-    return data;
-  } catch (err) {
-    console.error("FETCH FAILED:", err);
-    throw err;
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new ApiError(res.status, text);
   }
+  return res.json();
 }
 
-// ── Videos ──────────────────────────────────────────────────────────────────
-
+// Videos
 export type Video = {
   id: string;
   url: string;
@@ -45,6 +26,7 @@ export type Video = {
   status: "pending" | "processing" | "done" | "failed";
   transcript: string | null;
   caption: string | null;
+  theme_tags: string[];
   created_at: string;
 };
 
@@ -54,15 +36,11 @@ export const videosApi = {
       method: "POST",
       body: JSON.stringify({ url, user_id: userId }),
     }),
-
   getById: (id: string) => request<Video>(`/videos/${id}`),
-
-  getByUser: (userId: string) =>
-    request<Video[]>(`/videos/user/${userId}`),
+  getByUser: (userId: string) => request<Video[]>(`/videos/user/${userId}`),
 };
 
-// ── Chat ─────────────────────────────────────────────────────────────────────
-
+// Chat
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 export const chatApi = {
@@ -73,8 +51,7 @@ export const chatApi = {
     }),
 };
 
-// ── Profiles ─────────────────────────────────────────────────────────────────
-
+// Profiles
 export type UserPreferences = {
   goals: string[];
   interests: string[];
@@ -87,8 +64,48 @@ export const profilesApi = {
       method: "POST",
       body: JSON.stringify({
         id: userId,
-        goals: prefs.goals.join(","),
+        goals: prefs.goals,
+        interests: prefs.interests,
         tone_preference: prefs.encouragementStyle,
       }),
     }),
+  get: (userId: string) => request<any>(`/profiles/${userId}`),
+};
+
+// Stats
+export type ThemeDistributionItem = {
+  theme_id: string;
+  label: string;
+  color: string;
+  count: number;
+  percentage: number;
+};
+
+export type ProfileSummary = {
+  total_videos: number;
+  processed_videos: number;
+  weeks_active: number;
+  theme_distribution: ThemeDistributionItem[];
+  top_theme: ThemeDistributionItem | null;
+};
+
+export type InsightItem = {
+  title: string;
+  description: string;
+  trend: "up" | "down" | "neutral";
+  change: string;
+};
+
+export type InsightsData = {
+  evolution_data: Record<string, number | string>[];
+  distribution: { name: string; value: number; color: string; theme_id: string }[];
+  insights: InsightItem[];
+  has_data: boolean;
+};
+
+export const statsApi = {
+  getSummary: (userId: string) =>
+    request<ProfileSummary>(`/stats/${userId}/summary`),
+  getInsights: (userId: string) =>
+    request<InsightsData>(`/stats/${userId}/insights`),
 };
