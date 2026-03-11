@@ -55,6 +55,7 @@ export function Home() {
   };
 
   useEffect(() => {
+    if (!userId) return;
     fetchVideos();
     // Poll every 8 seconds to pick up status changes (pending → done)
     const interval = setInterval(fetchVideos, 10000);
