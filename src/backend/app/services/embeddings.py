@@ -12,8 +12,8 @@ from typing import Optional
 
 genai.configure(api_key=settings.google_api_key)
 
-CHUNK_SIZE = 400      # characters per chunk (roughly 80-100 words)
-CHUNK_OVERLAP = 80   # overlap so context isn't lost at boundaries
+CHUNK_SIZE = 200      # characters per chunk (roughly 80-100 words)
+CHUNK_OVERLAP = 50   # overlap so context isn't lost at boundaries
 
 
 def embed_text(text: str) -> Optional[list[float]]:
