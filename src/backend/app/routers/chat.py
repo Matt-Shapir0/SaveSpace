@@ -30,7 +30,7 @@ def _build_system_prompt(first_name, goals, tone, relevant_chunks):
 RELEVANT CONTENT FROM {name_str.upper()}'S SAVED VIDEOS:
 {excerpts}
 
-When relevant, reference this content naturally — e.g. "You saved something about..." or "Based on what you've been watching...". Don't force it if not relevant."""
+Only if relevant, use saved content as an emotional guide without directly referencing any videos. Don't force it if not relevant."""
     else:
         chunks_str = f"{name_str} has not saved any videos yet. Do NOT reference saved content until there is saved videos."
 
