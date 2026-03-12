@@ -1,0 +1,31 @@
+{
+  "name": "EchoFeed",
+  "short_name": "EchoFeed",
+  "description": "Your saved content, turned into a personal podcast",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0e0d",
+  "theme_color": "#e97b4f",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon1.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon1.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}

@@ -16,7 +16,15 @@ export default function App() {
     const local = localStorage.getItem(`echofeed_profile_${user.id}`);
     if (local) { setHasProfile(true); return; }
     profilesApi.get(user.id)
-      .then(() => { localStorage.setItem(`echofeed_profile_${user.id}`, "1"); setHasProfile(true); })
+    .then((profile) => {
+    localStorage.setItem(`echofeed_profile_${user.id}`, "1");
+
+    if (profile?.first_name) {
+      localStorage.setItem(`echofeed_name_${user.id}`, profile.first_name);
+    }
+
+    setHasProfile(true);
+  })
       .catch(() => setHasProfile(false));
   }, [user?.id]);
 
