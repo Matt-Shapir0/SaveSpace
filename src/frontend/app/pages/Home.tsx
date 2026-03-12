@@ -1,16 +1,49 @@
-// src/frontend/app/pages/Home.tsx
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { Plus, Loader2, AlertCircle, TrendingUp } from "lucide-react";
+import { Play, Calendar, Sparkles, TrendingUp, Loader2 } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
-import { videosApi, type Video } from "../lib/api";
+import { statsApi, type ProfileSummary } from "../lib/api";
 import { useUser } from "../lib/useUser";
+import { themeColors, type ThemeId } from "../lib/themes";
 
-const COVER_IMAGES = [
-  "https://images.unsplash.com/photo-1758874572918-178c7f8e74df?w=400&q=80",
-  "https://images.unsplash.com/photo-1745970347554-854e886c5685?w=400&q=80",
-  "https://images.unsplash.com/photo-1761590206515-1816e5123df9?w=400&q=80",
+// ── Static sample data
+// Podcast experience before generation is built.
+// Replace with real API data once episodes endpoint exists.
+const SAMPLE_FEATURED = {
+  id: "sample",
+  title: "Today's Focus: Building Resilience",
+  description: "Based on your interests in personal growth and mindfulness",
+  duration: "12 min",
+  coverImage:
+    "https://images.unsplash.com/photo-1745970347554-854e886c5685?w=800&q=80",
+  themes: ["growth", "mindfulness"] as ThemeId[],
+};
+
+const SAMPLE_EPISODES = [
+  {
+    id: "sample-1",
+    title: "Your Weekly Reinforcement",
+    date: "Mar 1, 2026",
+    duration: "18 min",
+    coverImage:
+      "https://images.unsplash.com/photo-1758874572918-178c7f8e74df?w=400&q=80",
+    themes: ["growth", "selfcare"] as ThemeId[],
+    excerpt:
+      "This week's episode draws from your saved content about resilience and self-compassion.",
+  },
+  {
+    id: "sample-2",
+    title: "Finding Your Motivation",
+    date: "Feb 23, 2026",
+    duration: "22 min",
+    coverImage:
+      "https://images.unsplash.com/photo-1745970347554-854e886c5685?w=400&q=80",
+    themes: ["motivation", "confidence"] as ThemeId[],
+    excerpt: "Built from insights about staying consistent with your goals.",
+  },
 ];
+
+// ── Helper ────────────────────────────────────────────────────────────────────
 
 function getGreeting(firstName?: string | null) {
   const h = new Date().getHours();
@@ -18,127 +51,201 @@ function getGreeting(firstName?: string | null) {
   return firstName ? `${time}, ${firstName}!` : `${time}!`;
 }
 
+const TODAY = new Date().toLocaleDateString("en-US", {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+});
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export function Home() {
   const { userId } = useUser();
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [submitUrl, setSubmitUrl] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [showInput, setShowInput] = useState(false);
-
   const firstName = userId ? localStorage.getItem(`echofeed_name_${userId}`) : null;
-
-  const fetchVideos = async () => {
-    if (!userId) return;
-    try { setVideos(await videosApi.getByUser(userId)); }
-    catch { setError("Couldn't load your saved videos."); }
-    finally { setLoading(false); }
-  };
+  const [summary, setSummary] = useState<ProfileSummary | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
-    fetchVideos();
-    const interval = setInterval(fetchVideos, 8000);
-    return () => clearInterval(interval);
+    if (!userId) return;
+    statsApi
+      .getSummary(userId)
+      .then(setSummary)
+      .catch(() => {})
+      .finally(() => setStatsLoading(false));
   }, [userId]);
 
-  const handleSubmit = async () => {
-    if (!submitUrl.trim() || !userId) return;
-    setSubmitting(true); setError(null);
-    try {
-      await videosApi.submit(submitUrl.trim(), userId);
-      setSubmitUrl(""); setShowInput(false);
-      await fetchVideos();
-    } catch { setError("Couldn't save that URL. Check it and try again."); }
-    finally { setSubmitting(false); }
-  };
-
-  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-  const processed = videos.filter((v) => v.status === "done").length;
+  // Build a natural-language summary of what the user has been saving
+  const growthSummary = (() => {
+    if (statsLoading) return null;
+    if (!summary || summary.total_videos === 0) {
+      return "Save your first video to start building your personalized feed.";
+    }
+    const top = summary.theme_distribution.slice(0, 2);
+    if (top.length === 0) {
+      return `You've saved ${summary.total_videos} video${summary.total_videos !== 1 ? "s" : ""}. Processing underway — themes will appear soon.`;
+    }
+    const themeNames = top.map((t) => t.label.toLowerCase()).join(" and ");
+    return `You've saved ${summary.total_videos} video${summary.total_videos !== 1 ? "s" : ""} this week, with a strong focus on ${themeNames}. Your mindset is actively shifting.`;
+  })();
 
   return (
     <div className="min-h-screen">
-      <div className="relative h-56 overflow-hidden">
-        <ImageWithFallback src={COVER_IMAGES[0]} alt="Morning" className="w-full h-full object-cover" />
+      {/* ── Hero ── */}
+      <div className="relative h-64 overflow-hidden">
+        <ImageWithFallback
+          src="https://images.unsplash.com/photo-1761590206515-1816e5123df9?w=1080&q=80"
+          alt="Morning inspiration"
+          className="w-full h-full object-cover"
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
         <div className="absolute bottom-6 left-6 right-6">
           <h1 className="text-3xl mb-1 text-foreground">{getGreeting(firstName)}</h1>
-          <p className="text-foreground/80 text-sm">{today}</p>
+          <p className="text-foreground/80 text-sm">{TODAY}</p>
         </div>
       </div>
 
-      <div className="px-6 pt-6 pb-2">
-        {showInput ? (
-          <div className="flex gap-2">
-            <input type="url" value={submitUrl} onChange={(e) => setSubmitUrl(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-              placeholder="Paste a TikTok or Reel URL…" autoFocus
-              className="flex-1 bg-card border border-border rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-ring/20" />
-            <button onClick={handleSubmit} disabled={submitting || !submitUrl.trim()}
-              className="bg-primary text-primary-foreground rounded-2xl px-4 py-3 text-sm disabled:opacity-50">
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
-            </button>
-            <button onClick={() => setShowInput(false)} className="text-muted-foreground px-3 text-sm">Cancel</button>
-          </div>
-        ) : (
-          <button onClick={() => setShowInput(true)}
-            className="w-full flex items-center gap-3 bg-primary/10 hover:bg-primary/15 border border-primary/20 rounded-2xl px-5 py-4 transition-colors">
-            <div className="bg-primary rounded-full p-1"><Plus className="w-4 h-4 text-primary-foreground" /></div>
-            <span className="text-sm text-primary">Save a TikTok or Reel URL</span>
-          </button>
-        )}
-      </div>
-
-      {error && (
-        <div className="mx-6 mt-3 flex items-center gap-2 bg-destructive/10 text-destructive rounded-2xl px-4 py-3 text-sm">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
+      {/* ── Featured Episode ── */}
+      <div className="px-6 py-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles className="w-5 h-5 text-primary" />
+          <h2>Featured for You Today</h2>
         </div>
-      )}
 
-      {videos.length > 0 && (
-        <div className="px-6 py-4">
-          <div className="bg-card rounded-3xl p-5 border border-border/50">
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingUp className="w-5 h-5 text-primary" />
-              <h3>Your Library</h3>
+        <Link
+          to={`/podcast/${SAMPLE_FEATURED.id}`}
+          className="block bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-3xl overflow-hidden border border-primary/20 hover:border-primary/40 transition-all active:scale-[0.99]"
+        >
+          <div className="flex gap-4 p-5">
+            <div className="relative w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0 bg-secondary">
+              <ImageWithFallback
+                src={SAMPLE_FEATURED.coverImage}
+                alt={SAMPLE_FEATURED.title}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                <div className="bg-primary rounded-full p-2.5">
+                  <Play className="w-6 h-6 text-primary-foreground fill-current" />
+                </div>
+              </div>
             </div>
-            <p className="text-sm text-muted-foreground">{processed} of {videos.length} videos processed</p>
-            {processed > 0 && <Link to="/insights" className="text-sm text-primary mt-2 block">View your insights →</Link>}
+            <div className="flex-1 min-w-0">
+              <div className="flex gap-1 flex-wrap mb-2">
+                {SAMPLE_FEATURED.themes.map((t) => (
+                  <span
+                    key={t}
+                    className={`text-xs ${themeColors[t]?.bg} ${themeColors[t]?.border} border px-2 py-0.5 rounded-lg`}
+                  >
+                    {themeColors[t]?.icon} {themeColors[t]?.name}
+                  </span>
+                ))}
+              </div>
+              <h3 className="mb-1">{SAMPLE_FEATURED.title}</h3>
+              <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
+                {SAMPLE_FEATURED.description}
+              </p>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>{SAMPLE_FEATURED.duration}</span>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        </Link>
+      </div>
 
+      {/* ── Growth Card (real data) ── */}
+      <div className="px-6 pb-4">
+        <div className="bg-card rounded-3xl p-5 border border-border/50">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="w-5 h-5 text-primary" />
+            <h3>Your Growth This Week</h3>
+          </div>
+
+          {statsLoading ? (
+            <div className="flex items-center gap-2 py-1">
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Loading…</span>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground mb-3">{growthSummary}</p>
+
+              {/* Real theme pills */}
+              {summary && summary.theme_distribution.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {summary.theme_distribution.slice(0, 3).map((t) => (
+                    <span
+                      key={t.theme_id}
+                      className="text-xs px-2.5 py-1 rounded-xl border"
+                      style={{
+                        backgroundColor: t.color + "20",
+                        borderColor: t.color + "40",
+                        color: t.color,
+                      }}
+                    >
+                      {t.label} · {t.percentage}%
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <Link to="/insights" className="text-sm text-primary flex items-center gap-1">
+                See your insights
+                <Sparkles className="w-4 h-4" />
+              </Link>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Recent Episodes (sample) ── */}
       <div className="px-6 pb-8">
         <div className="flex items-center justify-between mb-4">
-          <h2>Saved Videos</h2>
-          <Link to="/library" className="text-sm text-primary">View all</Link>
+          <h2>Recent Episodes</h2>
+          <Link to="/library" className="text-sm text-primary">
+            View all
+          </Link>
         </div>
-        {loading ? (
-          <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-        ) : videos.length === 0 ? (
-          <div className="text-center py-12 space-y-3">
-            <div className="text-4xl">🎬</div>
-            <p className="text-muted-foreground text-sm">No saved videos yet. Paste a TikTok or Reel URL above to get started.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {videos.slice(0, 8).map((video, i) => (
-              <div key={video.id} className="bg-card rounded-3xl overflow-hidden border border-border/50">
-                <div className="flex gap-4 p-4">
-                  <div className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 bg-secondary">
-                    <ImageWithFallback src={COVER_IMAGES[i % COVER_IMAGES.length]} alt="video" className="w-full h-full object-cover" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-muted-foreground capitalize">{video.status} · {video.source || "video"}</span>
+
+        <div className="space-y-4">
+          {SAMPLE_EPISODES.map((ep) => (
+            <Link
+              key={ep.id}
+              to={`/podcast/${ep.id}`}
+              className="block bg-card rounded-3xl overflow-hidden border border-border/50 hover:border-primary/30 transition-all active:scale-[0.99]"
+            >
+              <div className="flex gap-4 p-4">
+                <div className="relative w-20 h-20 rounded-2xl overflow-hidden flex-shrink-0 bg-secondary">
+                  <ImageWithFallback
+                    src={ep.coverImage}
+                    alt={ep.title}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <div className="bg-primary rounded-full p-2">
+                      <Play className="w-4 h-4 text-primary-foreground fill-current" />
                     </div>
-                    <p className="text-sm line-clamp-2 text-muted-foreground">{video.caption || video.url}</p>
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="mb-1 truncate text-base">{ep.title}</h3>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    {ep.date} · {ep.duration}
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {ep.themes.slice(0, 2).map((t) => (
+                      <span
+                        key={t}
+                        className={`text-xs ${themeColors[t]?.bg} ${themeColors[t]?.border} border px-2 py-0.5 rounded-lg`}
+                      >
+                        {themeColors[t]?.icon} {themeColors[t]?.name}
+                      </span>
+                    ))}
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );

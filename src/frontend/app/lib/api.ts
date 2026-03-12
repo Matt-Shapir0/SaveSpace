@@ -20,6 +20,8 @@ export const videosApi = {
   submit: (url: string, userId: string) => request<Video>("/videos/", { method: "POST", body: JSON.stringify({ url, user_id: userId }) }),
   getById: (id: string) => request<Video>(`/videos/${id}`),
   getByUser: (userId: string) => request<Video[]>(`/videos/user/${userId}`),
+  deleteVideo: (id: string) =>
+  request<{ deleted: string }>(`/videos/${id}`, { method: "DELETE" }),
 };
 
 // Chat

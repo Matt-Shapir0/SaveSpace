@@ -101,3 +101,13 @@ def get_user_videos(user_id: str):
         .execute()
     )
     return result.data
+
+@router.delete("/{video_id}")
+def delete_video(video_id: str):
+    db = get_supabase()
+    # Also delete associated chunks so RAG stays clean
+    db.table("chunks").delete().eq("video_id", video_id).execute()
+    result = db.table("videos").delete().eq("id", video_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return {"deleted": video_id}
