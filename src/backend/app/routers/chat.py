@@ -1,68 +1,97 @@
-# Simple Gemini chat endpoint.
-# Receives a conversation history from the frontend and returns the next reply.
-# No RAG yet — plain LLM conversation. We'll add saved-content context later.
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Literal
-from app.ai.gemini_client import get_gemini_client
+from typing import Literal, Optional
+from app.ai.gemini_client import model
+from app.database import get_supabase
+from app.services.embeddings import retrieve_relevant_chunks
 
 router = APIRouter()
 
-SYSTEM_PROMPT = """You are a warm, emotionally intelligent personal coach named Echo.
-You help users reflect on their mindset, celebrate wins, work through doubts, and stay motivated.
-Keep responses concise (2-4 sentences), conversational, and supportive.
-You reference personal growth, resilience, and self-compassion when relevant.
-Do NOT give generic life advice — be specific and grounded in what the user actually says."""
+TONE_DESCRIPTIONS = {
+    "gentle": "warm, gentle, and compassionate — like a caring friend",
+    "motivational": "direct, energising, and action-oriented — like a coach",
+    "thoughtful": "reflective and philosophical — asking good questions",
+}
+
+
+def _build_system_prompt(first_name, goals, tone, relevant_chunks):
+    name_str = first_name or "the user"
+    tone_desc = TONE_DESCRIPTIONS.get(tone or "", "warm and supportive")
+    goals_str = f"\nTheir stated goals are: {goals}." if goals else ""
+
+    chunks_str = ""
+    if relevant_chunks:
+        excerpts = "\n".join(
+            f'- "{c["chunk_text"][:200].strip()}"'
+            for c in relevant_chunks if c.get("chunk_text")
+        )
+        chunks_str = f"""
+
+RELEVANT CONTENT FROM {name_str.upper()}'S SAVED VIDEOS:
+{excerpts}
+
+When relevant, reference this content naturally — e.g. "You saved something about..." or "Based on what you've been watching...". Don't force it if not relevant."""
+
+    return f"""You are Echo, {name_str}'s personal mindset coach inside their EchoFeed app.
+Your tone is {tone_desc}.{goals_str}
+You have access to content {name_str} has intentionally saved from TikTok and Instagram.{chunks_str}
+
+Guidelines:
+- Keep responses to 2-4 sentences unless they need more
+- Reference their saved content when genuinely relevant
+- Use their first name occasionally
+- Be specific, not generic
+- Acknowledge struggle before offering perspective"""
 
 
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str
 
-
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     user_id: str
 
-
 class ChatResponse(BaseModel):
     reply: str
+    used_rag: bool
 
 
 @router.post("/", response_model=ChatResponse)
 async def chat(payload: ChatRequest):
-    """
-    Send a conversation history to Gemini and return the next assistant reply.
-    The frontend sends the full message history on every call.
-    """
     if not payload.messages:
         raise HTTPException(status_code=400, detail="messages cannot be empty")
 
-    client = get_gemini_client()
-    model = client
-
-    # Build the prompt Gemini expects.
-    # Gemini's chat API takes a list of Content objects with role/parts.
-    # We prepend a system instruction and then pass the conversation.
+    db = get_supabase()
+    profile = {}
     try:
-        history = []
-        for msg in payload.messages[:-1]:  # all messages except the last
-            history.append({
-                "role": "user" if msg.role == "user" else "model",
-                "parts": [msg.content],
-            })
+        result = db.table("profiles").select("first_name, goals, tone_preference").eq("id", payload.user_id).execute()
+        if result.data:
+            profile = result.data[0]
+    except Exception as e:
+        print(f"Profile fetch non-fatal: {e}")
 
-        last_message = payload.messages[-1].content
-        chat_session = model.start_chat(history=history)
-        response = chat_session.send_message(
-            f"[System: {SYSTEM_PROMPT}]\n\n{last_message}" if not history else last_message
-        )
+    last_user_msg = next((m.content for m in reversed(payload.messages) if m.role == "user"), "")
 
-        response = chat_session.send_message(last_message)
-        reply = response.text.strip()
+    relevant_chunks = []
+    if last_user_msg and len(last_user_msg) > 5:
+        chunks = retrieve_relevant_chunks(payload.user_id, last_user_msg, top_k=5)
+        relevant_chunks = [c for c in chunks if (c.get("similarity") or 0) > 0.6]
 
-        return ChatResponse(reply=reply)
+    system_prompt = _build_system_prompt(
+        profile.get("first_name"), profile.get("goals"),
+        profile.get("tone_preference"), relevant_chunks
+    )
 
+    history = [
+        {"role": "user", "parts": [system_prompt]},
+        {"role": "model", "parts": ["Understood. Ready to chat."]},
+    ]
+    for msg in payload.messages[:-1]:
+        history.append({"role": "user" if msg.role == "user" else "model", "parts": [msg.content]})
+
+    try:
+        response = model.start_chat(history=history).send_message(last_user_msg)
+        return ChatResponse(reply=response.text.strip(), used_rag=len(relevant_chunks) > 0)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gemini error: {str(e)}")

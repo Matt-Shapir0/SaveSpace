@@ -8,6 +8,7 @@ router = APIRouter()
 
 class ProfileCreate(BaseModel):
     id: str
+    first_name: Optional[str] = None
     goals: Optional[list[str]] = []
     interests: Optional[list[str]] = []
     tone_preference: Optional[str] = None
@@ -18,6 +19,7 @@ def create_or_update_profile(payload: ProfileCreate):
     db = get_supabase()
     result = db.table("profiles").upsert({
         "id": payload.id,
+        "first_name": payload.first_name,
         "goals": ",".join(payload.goals) if payload.goals else None,
         "goals_array": payload.goals,
         "interests_array": payload.interests,
@@ -26,7 +28,6 @@ def create_or_update_profile(payload: ProfileCreate):
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to save profile")
-
     return result.data[0]
 
 

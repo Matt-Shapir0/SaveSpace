@@ -1,16 +1,10 @@
-// Auth flow:
-// 1. Loading → spinner
-// 2. Not signed in → AuthScreen
-// 3. Signed in, no profile → Onboarding
-// 4. Signed in, has profile → Main app
-
 import { useState, useEffect } from "react";
 import { RouterProvider } from "react-router";
 import { router } from "./routes";
-import { Onboarding } from "./components/Onboarding";
+import { Onboarding, type UserPreferences } from "./components/Onboarding";
 import { AuthScreen } from "./components/AuthScreen";
 import { useAuth } from "./lib/useAuth";
-import { profilesApi, type UserPreferences } from "./lib/api";
+import { profilesApi } from "./lib/api";
 import { Loader2 } from "lucide-react";
 
 export default function App() {
@@ -29,6 +23,7 @@ export default function App() {
   const handleOnboardingComplete = async (prefs: UserPreferences) => {
     if (!user) return;
     localStorage.setItem(`echofeed_profile_${user.id}`, "1");
+    localStorage.setItem(`echofeed_name_${user.id}`, prefs.firstName);
     localStorage.setItem("userPreferences", JSON.stringify(prefs));
     setHasProfile(true);
     try { await profilesApi.save(user.id, prefs); }
