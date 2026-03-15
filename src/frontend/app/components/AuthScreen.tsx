@@ -83,7 +83,7 @@ export function AuthScreen({ onAuth }: Props) {
         <div className="w-20 h-20 bg-gradient-to-br from-primary to-primary/70 rounded-3xl flex items-center justify-center mb-6">
           <Sparkles className="w-10 h-10 text-primary-foreground" />
         </div>
-        <h1 className="text-3xl mb-2 text-center">EchoFeed</h1>
+        <h1 className="text-3xl mb-2 text-center">SaveSpace</h1>
         <p className="text-muted-foreground text-center text-sm mb-8">
           Your saved content, turned into a personal podcast
         </p>

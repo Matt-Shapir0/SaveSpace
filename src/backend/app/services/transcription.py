@@ -12,42 +12,26 @@ from google.oauth2 import service_account
 
 from yt_dlp.utils import DownloadError
 
-def extract_video_data(url: str) -> Dict:
+def extract_video_data(url: str, video_path: str) -> dict:
     """
     Extract transcript, caption, and metadata from a video URL.
-    Returns a dict with keys: transcript, caption, title, author, duration
-    
-    Strategy:
-    1. Try to get native subtitles/auto-captions (free, fast, accurate)
-    2. If none found, download audio and run Whisper (slower, costs money)
+    video_path: path to downloaded video to avoid re-downloading
     """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        video_path = _download_video(url, tmpdir)
-        if not video_path:
-            return {
-                "transcript": None,
-                "caption": None,
-                "title": None,
-                "author": None,
-                "duration": None,
-            }
-        transcript = _try_native_transcript(url, tmpdir)
-        metadata = _get_metadata(url)
-        
-        if not transcript:
-            print(f"No native transcript found for {url}. Falling back to Gemini.")
-            audio_path = _extract_audio(video_path)
-            transcript = transcribe_with_google(audio_path)
-            # transcript = 'no transcript found'
-        
-        return {
-            "transcript": transcript,
-            "caption": metadata.get("description") or metadata.get("title"),
-            "title": metadata.get("title"),
-            "author": metadata.get("uploader"),
-            "duration": metadata.get("duration"),
-        }
+    transcript = _try_native_transcript(url, os.path.dirname(video_path))
+    metadata = _get_metadata(url)
 
+    if not transcript:
+        print(f"No native transcript found for {url}. Falling back to Gemini.")
+        audio_path = _extract_audio(video_path)
+        transcript = transcribe_with_google(audio_path)
+
+    return {
+        "transcript": transcript,
+        "caption": metadata.get("description") or metadata.get("title"),
+        "title": metadata.get("title"),
+        "author": metadata.get("uploader"),
+        "duration": metadata.get("duration"),
+    }
 
 def _try_native_transcript(url: str, tmpdir: str) -> Optional[str]:
     """
@@ -188,22 +172,25 @@ def _extract_audio(video_path: str):
 
     return audio_path
 
-def _download_video(url, tmpdir):
-    opts = {
-        "format": "worst",
-        "outtmpl": f"{tmpdir}/video.mp4",
+def download_video(url: str, tmpdir: str) -> Optional[str]:
+    video_opts = {
+        "format": "worstvideo[ext=mp4]/worst[ext=mp4]/worst",
+        "outtmpl": f"{tmpdir}/video.%(ext)s",
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
         },
+        "quiet": True,
+        "no_warnings": True,
     }
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
+        with yt_dlp.YoutubeDL(video_opts) as ydl:
             ydl.download([url])
-    except DownloadError as e:
-        print(f"yt-dlp failed for {url}: {e}")
-        return None
 
-    return f"{tmpdir}/video.mp4"
+        video_files = sorted(glob.glob(f"{tmpdir}/video.*"))
+        return video_files[0] if video_files else None
+    except Exception as e:
+        print(f"Video download failed: {e}")
+        return None
 
 def transcribe_with_google(audio_path: str):
 
