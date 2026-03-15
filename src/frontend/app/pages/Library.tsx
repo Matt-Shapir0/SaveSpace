@@ -405,9 +405,32 @@ export function Library() {
 
   useEffect(() => { loadVideos(); const iv = setInterval(loadVideos, 8000); return () => clearInterval(iv); }, [userId]);
 
+  // return (
+  //   <div className="flex flex-col">
+  //     <div className="px-6 pt-6 pb-4 flex-shrink-0">
+  //       <h1 className="mb-4">Your Library</h1>
+  //       <div className="flex gap-2">
+  //         {(["podcasts", "videos"] as TabType[]).map((t) => (
+  //           <button key={t} onClick={() => setTab(t)}
+  //             className={`flex-1 py-3 px-4 rounded-2xl text-sm transition-all capitalize ${tab === t ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>
+  //             {t}
+  //           </button>
+  //         ))}
+  //       </div>
+  //     </div>
+  //     <div className="flex-1 overflow-y-auto px-6 pb-24">
+  //       {tab === "podcasts"
+  //         ? <PodcastsTab userId={userId!} />
+  //         : <VideosTab videos={videos} loading={loading} error={error} userId={userId!}
+  //             onVideoAdded={loadVideos} onDelete={(id) => setVideos((prev) => prev.filter((v) => v.id !== id))} />
+  //       }
+  //     </div>
+  //   </div>
+  // );
+
   return (
-    <div className="min-h-screen">
-      <div className="px-6 pt-6 pb-4">
+    <div className="flex flex-col">
+      <div className="px-6 pt-6 pb-4 flex-shrink-0">
         <h1 className="mb-4">Your Library</h1>
         <div className="flex gap-2">
           {(["podcasts", "videos"] as TabType[]).map((t) => (
@@ -418,11 +441,20 @@ export function Library() {
           ))}
         </div>
       </div>
-      <div className="px-6">
+
+      <div className="px-6 pb-0">
         {tab === "podcasts"
           ? <PodcastsTab userId={userId!} />
-          : <VideosTab videos={videos} loading={loading} error={error} userId={userId!}
-              onVideoAdded={loadVideos} onDelete={(id) => setVideos((prev) => prev.filter((v) => v.id !== id))} />
+          : <VideosTab
+              videos={videos}
+              loading={loading}
+              error={error}
+              userId={userId!}
+              onVideoAdded={loadVideos}
+              onDelete={(id) =>
+                setVideos((prev) => prev.filter((v) => v.id !== id))
+              }
+            />
         }
       </div>
     </div>

@@ -18,7 +18,7 @@ export function Layout() {
       </div>
 
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-card border-t border-border/50">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 max-w-md mx-auto bg-card border-t border-border/50">
         <div className="flex items-center justify-around px-6 py-3">
           <Link 
             to="/" 
