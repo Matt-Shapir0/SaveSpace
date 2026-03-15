@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
@@ -20,8 +20,6 @@ export const videosApi = {
   submit: (url: string, userId: string) => request<Video>("/videos/", { method: "POST", body: JSON.stringify({ url, user_id: userId }) }),
   getById: (id: string) => request<Video>(`/videos/${id}`),
   getByUser: (userId: string) => request<Video[]>(`/videos/user/${userId}`),
-  deleteVideo: (id: string) =>
-  request<{ deleted: string }>(`/videos/${id}`, { method: "DELETE" }),
 };
 
 // Chat
@@ -51,4 +49,40 @@ export type InsightsData = { evolution_data: Record<string, number | string>[]; 
 export const statsApi = {
   getSummary: (userId: string) => request<ProfileSummary>(`/stats/${userId}/summary`),
   getInsights: (userId: string) => request<InsightsData>(`/stats/${userId}/insights`),
+};
+
+// Episodes
+export type EpisodeSegment = { text: string; start_time: number; end_time: number };
+
+export type Episode = {
+  id: string;
+  user_id: string;
+  title: string;
+  script: string | null;
+  segments: EpisodeSegment[];
+  themes: string[];
+  audio_url: string | null;
+  audio_duration: number | null;
+  video_ids: string[];
+  status: "generating" | "done" | "failed";
+  error_message: string | null;
+  created_at: string;
+};
+
+export type EpisodeSummary = Pick<Episode,
+  "id" | "title" | "status" | "themes" | "audio_url" | "audio_duration" | "created_at" | "error_message"
+>;
+
+export const episodesApi = {
+  generate: (userId: string) =>
+    request<{ episode_id: string; status: string }>("/episodes/generate", {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    }),
+  listByUser: (userId: string) =>
+    request<EpisodeSummary[]>(`/episodes/user/${userId}`),
+  getById: (episodeId: string) =>
+    request<Episode>(`/episodes/${episodeId}`),
+  delete: (episodeId: string) =>
+    request<{ deleted: string }>(`/episodes/${episodeId}`, { method: "DELETE" }),
 };
