@@ -1,4 +1,5 @@
 from datetime import datetime, date, timedelta
+import tempfile
 from app.database import get_supabase
 from app.services.transcription import extract_video_data, download_video
 from app.services.ocr import extract_text_from_frames
