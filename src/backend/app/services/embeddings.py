@@ -18,7 +18,7 @@ def embed_text(text: str) -> Optional[list[float]]:
     Embed stored document chunks.
     """
     try:
-        result = client.models.embed_content(model=EMBED_MODEL, contents=text, config=types.EmbedContentConfig(output_dimensionality=1500))
+        result = client.models.embed_content(model=EMBED_MODEL, contents=text, config=types.EmbedContentConfig(output_dimensionality=1536))
         return result.embeddings[0].values
     except Exception as e:
         print(f"Embedding failed: {e}")
