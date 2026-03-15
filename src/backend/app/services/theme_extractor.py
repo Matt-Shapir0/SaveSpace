@@ -3,7 +3,9 @@ Extracts mindset themes from video transcript text using Gemini.
 Maps content to a fixed set of theme IDs that match the frontend's themeColors.
 """
 import json
-from app.ai.gemini_client import model
+from app.ai.gemini_client import client
+
+MODEL_NAME = "gemini-2.5-flash"
 
 VALID_THEMES = [
     "growth",        # Personal growth, learning, improvement
@@ -52,7 +54,7 @@ If the content is not motivational or mindset-related, return: []
 JSON array only, no explanation:"""
 
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model=MODEL_NAME, contents=prompt)
         raw = response.text.strip()
 
         # Strip markdown code fences if present
