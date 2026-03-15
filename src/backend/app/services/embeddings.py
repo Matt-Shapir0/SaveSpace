@@ -1,11 +1,13 @@
 from google import genai
+from google.genai import types
+
 from app.config import settings
 from app.database import get_supabase
 from typing import Optional
 
 client = genai.Client(api_key=settings.google_api_key)
 
-EMBED_MODEL = "text-embedding-3-small"
+EMBED_MODEL = "gemini-embedding-001"
 
 CHUNK_SIZE = 200
 CHUNK_OVERLAP = 50
@@ -16,7 +18,7 @@ def embed_text(text: str) -> Optional[list[float]]:
     Embed stored document chunks.
     """
     try:
-        result = client.models.embed_content(model=EMBED_MODEL, contents=text)
+        result = client.models.embed_content(model=EMBED_MODEL, contents=text, config=types.EmbedContentConfig(output_dimensionality=1500))
         return result.embeddings[0].values
     except Exception as e:
         print(f"Embedding failed: {e}")
