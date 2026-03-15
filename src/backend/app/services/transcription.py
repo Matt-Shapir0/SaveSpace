@@ -12,7 +12,7 @@ from google.oauth2 import service_account
 
 from yt_dlp.utils import DownloadError
 
-def extract_video_data(url: str, video_path: str) -> dict:
+def extract_video_data(url: str) -> Dict:
     """
     Extract transcript, caption, and metadata from a video URL.
     video_path: path to downloaded video to avoid re-downloading
@@ -172,30 +172,14 @@ def _extract_audio(video_path: str):
 
     return audio_path
 
-def download_video(url: str, tmpdir: str) -> Optional[str]:
-    video_opts = {
-        "format": "worstvideo[ext=mp4]/worst[ext=mp4]/worst",
-        "outtmpl": f"{tmpdir}/video.%(ext)s",
-        "http_headers": {
-            "User-Agent": "Mozilla/5.0"
-        },
-        "quiet": True,
-        "no_warnings": True,
-        "retries": 1,
+def _download_video(url, tmpdir):
+    opts = {
+        "format": "worst",
+        "outtmpl": f"{tmpdir}/video.mp4",
     }
-    try:
-        with yt_dlp.YoutubeDL(video_opts) as ydl:
-            ydl.download([url])
 
-        video_files = sorted(glob.glob(f"{tmpdir}/video.*"))
-        if not video_files:
-            print(f"No video files downloaded for {url}")
-            return None
-        return video_files[0]
-
-    except DownloadError as e:
-        print(f"Video download failed for {url}: {e}")
-        return None
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        ydl.download([url])
 
 def transcribe_with_google(audio_path: str):
 
