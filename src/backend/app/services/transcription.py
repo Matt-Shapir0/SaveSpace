@@ -10,6 +10,8 @@ import subprocess
 from google.cloud import speech
 from google.oauth2 import service_account
 
+from yt_dlp.utils import DownloadError
+
 def extract_video_data(url: str) -> Dict:
     """
     Extract transcript, caption, and metadata from a video URL.
@@ -190,10 +192,16 @@ def _download_video(url, tmpdir):
     opts = {
         "format": "worst",
         "outtmpl": f"{tmpdir}/video.mp4",
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+        },
     }
-
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download([url])
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+    except DownloadError as e:
+        print(f"yt-dlp failed for {url}: {e}")
+        return None
 
     return f"{tmpdir}/video.mp4"
 
