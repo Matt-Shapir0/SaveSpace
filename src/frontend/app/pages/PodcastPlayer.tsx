@@ -6,6 +6,7 @@ import { Play, Pause, SkipBack, SkipForward, ChevronDown, Share2, Loader2, Alert
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { themeColors, type ThemeId } from "../lib/themes";
 import { episodesApi, type Episode } from "../lib/api";
+import { useUser } from "../lib/useUser";
 
 const COVER_IMAGES = [
   "https://images.unsplash.com/photo-1758874572918-178c7f8e74df?w=1080&q=80",
@@ -64,6 +65,7 @@ function KaraokeView({ segments, currentTime }: {
 // Main Player
 export function PodcastPlayer() {
   const { id } = useParams<{ id: string }>();
+  const { userId } = useUser();
   const location = useLocation();
   const from = (location.state as { from?: string })?.from || "/";
 
@@ -83,7 +85,7 @@ export function PodcastPlayer() {
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !userId) return;
     const load = async () => {
       try {
         const data = await episodesApi.getById(id);
@@ -109,7 +111,7 @@ export function PodcastPlayer() {
     };
     load();
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [id]);
+  }, [id, userId]);
 
   // Audio event listeners
   useEffect(() => {

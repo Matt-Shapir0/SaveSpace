@@ -105,7 +105,7 @@ function VideoCard({ video, onDelete }: { video: Video; onDelete: (id: string) =
   );
 }
 
-// ── Theme drill-down ──────────────────────────────────────────────────────────
+// Theme drill-down
 
 function ThemeDrillDown({ themeId, videos, onBack, onDelete }: {
   themeId: ThemeId; videos: Video[]; onBack: () => void; onDelete: (id: string) => void;
@@ -255,6 +255,7 @@ function PodcastsTab({ userId }: { userId: string }) {
   };
 
   useEffect(() => {
+    if (!userId) return;
     loadEpisodes();
   }, [userId]);
 
