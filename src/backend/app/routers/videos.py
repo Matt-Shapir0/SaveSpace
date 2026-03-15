@@ -22,7 +22,12 @@ def detect_source(url: str) -> str:
 @router.post("/", response_model=VideoResponse, status_code=202)
 async def create_video(payload: VideoCreate):
     db = get_supabase()
-    source = detect_source(payload.url)
+    
+    try:
+        source = detect_source(payload.url)
+    except Exception as e:
+        print("detect_source failed:", e)
+        raise HTTPException(status_code=400, detail="Invalid URL source")
 
     # Check if video already exists
     existing = (
@@ -53,6 +58,7 @@ async def create_video(payload: VideoCreate):
         "status": "pending",
     }).execute()
 
+    print("Insert result:", result)
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to save video")
 
