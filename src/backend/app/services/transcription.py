@@ -9,13 +9,15 @@ import tempfile
 import subprocess
 from google.cloud import speech
 from google.oauth2 import service_account
-
 from yt_dlp.utils import DownloadError
-
 from google.cloud import speech
 
 def get_speech_client():
-    return speech.SpeechClient()
+    if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in os.environ:
+        data = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+        client_email = data.get("client_email")
+        credentials = service_account.Credentials.from_service_account_info(data)
+        return speech.SpeechClient(credentials=credentials)
 
 def extract_video_data(url: str) -> Dict:
     """
