@@ -17,7 +17,7 @@ from PIL import Image
 import numpy as np
 
 
-def extract_text_from_frames(video_path: str, num_frames: int = 8) -> Optional[str]:
+def extract_text_from_frames(url: str, num_frames: int = 8) -> Optional[str]:
     """
     Sample N frames from a video and OCR each one.
     Returns concatenated unique text found across all frames.
@@ -26,26 +26,25 @@ def extract_text_from_frames(video_path: str, num_frames: int = 8) -> Optional[s
     num_frames: how many frames to sample. More = more thorough but slower.
                 8 is a good balance for a 60-second TikTok.
     """
-    if not os.path.exists(video_path):
-        print(f"Video path does not exist: {video_path}")
-        return None
+    with tempfile.TemporaryDirectory() as tmpdir:
+        video_path = _download_video(url, tmpdir)
 
-    frames = _sample_frames(video_path, num_frames)
-    if not frames:
-        return None
+        frames = _sample_frames(video_path, num_frames)
+        if not frames:
+            return None
 
-    all_texts = []
-    for frame in frames:
-        text = _ocr_frame(frame)
-        if text:
-            all_texts.append(text)
+        all_texts = []
+        for frame in frames:
+            text = _ocr_frame(frame)
+            if text:
+                all_texts.append(text)
 
-    if not all_texts:
-        return None
+        if not all_texts:
+            return None
 
-    # Deduplicate — many frames will have identical overlays
-    unique_texts = list(dict.fromkeys(all_texts))
-    return " | ".join(unique_texts)
+        # Deduplicate — many frames will have identical overlays
+        unique_texts = list(dict.fromkeys(all_texts))
+        return " | ".join(unique_texts)
 
 
 def _download_video(url: str, tmpdir: str) -> Optional[str]:
