@@ -121,7 +121,7 @@ function ThemeDrillDown({ themeId, videos, onBack, onDelete }: {
           <p className="text-sm text-muted-foreground">{videos.length} video{videos.length !== 1 ? "s" : ""}</p>
         </div>
       </div>
-      <div className="space-y-3 pb-8">
+      <div className="space-y-3 pb-28">
         {videos.map((v) => <VideoCard key={v.id} video={v} onDelete={onDelete} />)}
       </div>
     </div>
@@ -195,7 +195,7 @@ function VideosTab({ videos, loading, error, userId, onVideoAdded, onDelete }: {
       ) : error ? (
         <div className="flex items-center gap-2 text-destructive text-sm py-4"><AlertCircle className="w-4 h-4" />{error}</div>
       ) : videos.length === 0 ? (
-        <div className="text-center py-12 space-y-3">
+        <div className="text-center py-28 space-y-3">
           <div className="text-5xl">📱</div>
           <p className="text-muted-foreground text-sm leading-relaxed">No saved videos yet.<br />Paste a URL above to get started.</p>
         </div>

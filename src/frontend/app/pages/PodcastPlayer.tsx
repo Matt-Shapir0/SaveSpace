@@ -16,43 +16,57 @@ const COVER_IMAGES = [
 
 // Karaoke text component
 
-function KaraokeView({ segments, currentTime }: {
+
+function KaraokeView({ segments, currentTime, audioDuration, onSeek }: {
   segments: Episode["segments"];
   currentTime: number;
+  audioDuration: number;       // real duration from <audio> element
+  onSeek: (time: number) => void;
 }) {
-  const activeIndex = segments.findLastIndex((s) => currentTime >= s.start_time);
   const containerRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLParagraphElement>(null);
 
-  // Auto-scroll to keep active sentence centred
+  // Rescale estimated timestamps to match actual audio duration.
+  // The backend estimates at a fixed wpm; TTS doesn't speak at a constant rate.
+  // Scaling proportionally makes karaoke timing much more accurate.
+  const estimatedTotal = segments[segments.length - 1]?.end_time || 1;
+  const scale = audioDuration > 0 ? audioDuration / estimatedTotal : 1;
+  const scaled = segments.map((s) => ({
+    ...s,
+    start_time: s.start_time * scale,
+    end_time: s.end_time * scale,
+  }));
+
+  const activeIndex = scaled.findLastIndex((s) => currentTime >= s.start_time);
+
   useEffect(() => {
-    if (activeRef.current && containerRef.current) {
-      activeRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
+    activeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [activeIndex]);
 
   if (segments.length === 0) return (
-    <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-      No transcript available yet.
+    <div className="flex items-center justify-center h-full text-muted-foreground text-sm py-16">
+      No transcript available.
     </div>
   );
 
   return (
-    <div ref={containerRef} className="space-y-4 pb-8">
-      {segments.map((seg, i) => {
+    <div ref={containerRef} className="space-y-5 pb-8">
+      {scaled.map((seg, i) => {
         const isActive = i === activeIndex;
         const isPast = i < activeIndex;
         return (
           <p
             key={i}
             ref={isActive ? activeRef : undefined}
-            className={`text-lg leading-relaxed transition-all duration-300 cursor-default select-none ${
-              isActive
+            onClick={() => onSeek(seg.start_time)}
+            className={`text-lg leading-relaxed transition-all duration-300 cursor-pointer select-none
+              active:scale-[0.98]
+              ${isActive
                 ? "text-foreground font-medium"
                 : isPast
-                ? "text-muted-foreground/40"
-                : "text-muted-foreground/60"
-            }`}
+                ? "text-muted-foreground/40 hover:text-muted-foreground/70"
+                : "text-muted-foreground/60 hover:text-muted-foreground/80"
+              }`}
           >
             {seg.text}
           </p>
@@ -140,6 +154,13 @@ export function PodcastPlayer() {
     else { audio.play(); setIsPlaying(true); }
   };
 
+    const seekTo = (time: number) => {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = time;
+    // If paused, start playing when user seeks via karaoke tap
+    if (!isPlaying) { audioRef.current.play(); setIsPlaying(true); }
+  };
+
   const skipBack = () => {
     if (audioRef.current) audioRef.current.currentTime = Math.max(0, currentTime - 15);
   };
@@ -152,6 +173,13 @@ export function PodcastPlayer() {
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = (e.clientX - rect.left) / rect.width;
     audioRef.current.currentTime = ratio * duration;
+  };
+
+  // Scrubber — called while dragging and on release
+  const handleScrub = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseFloat(e.target.value);
+    setCurrentTime(time);                          // update UI immediately while dragging
+    if (audioRef.current) audioRef.current.currentTime = time;
   };
 
   const formatTime = (s: number) => {
@@ -184,8 +212,7 @@ export function PodcastPlayer() {
   const isGenerating = episode.status === "generating";
   const isFailed = episode.status === "failed";
 
-  // ── Generating state ─────────────────────────────────────────────────────
-
+  // Generating state 
   if (isGenerating) return (
     <div className="flex flex-col h-screen">
       <div className="px-6 pt-6 pb-4 flex items-center">
@@ -223,13 +250,9 @@ export function PodcastPlayer() {
   );
 
   // Full player
-
   return (
     <div className="flex flex-col h-screen">
-      {/* Hidden audio element */}
-      {episode.audio_url && (
-        <audio ref={audioRef} src={episode.audio_url} preload="auto" />
-      )}
+      {episode.audio_url && <audio ref={audioRef} src={episode.audio_url} preload="auto" />}
 
       {/* Header */}
       <div className="px-6 pt-6 pb-4 flex items-center justify-between flex-shrink-0">
@@ -244,22 +267,19 @@ export function PodcastPlayer() {
           {(["podcast", "visual"] as const).map((m) => (
             <button key={m} onClick={() => setMode(m)}
               className={`flex-1 py-2 px-3 rounded-xl transition-all text-sm capitalize ${mode === m ? "bg-card shadow-sm" : "text-muted-foreground"}`}>
-              {m}
+              {m === "visual" ? "Visual" : "Podcast"}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Content */}
+      {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto px-6 pb-4 min-h-0">
         {mode === "podcast" ? (
           <div className="space-y-5">
-            {/* Cover */}
             <div className="aspect-square rounded-3xl overflow-hidden bg-secondary shadow-lg">
               <ImageWithFallback src={coverImage} alt={episode.title} className="w-full h-full object-cover" />
             </div>
-
-            {/* Info */}
             <div className="text-center space-y-2">
               <h1 className="text-2xl">{episode.title}</h1>
               <p className="text-muted-foreground text-sm">
@@ -273,33 +293,46 @@ export function PodcastPlayer() {
                 ))}
               </div>
             </div>
-
-            {/* Script / description */}
             {episode.script && (
               <div className="bg-card rounded-2xl p-4 border border-border/50">
                 <h3 className="mb-2 text-sm">Episode script</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed line-clamp-4">
-                  {episode.script}
-                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed line-clamp-4">{episode.script}</p>
               </div>
             )}
           </div>
         ) : (
-          /* Visual / karaoke mode */
-          <KaraokeView segments={episode.segments || []} currentTime={currentTime} />
+          <KaraokeView
+            segments={episode.segments || []}
+            currentTime={currentTime}
+            audioDuration={duration}
+            onSeek={seekTo}
+          />
         )}
       </div>
 
       {/* Player controls */}
       <div className="px-6 py-5 bg-card border-t border-border/50 flex-shrink-0">
-        {/* Scrubber */}
+        {/* Draggable scrubber */}
         <div className="mb-4">
-          <div
-            className="h-2 bg-secondary rounded-full overflow-hidden cursor-pointer"
-            onClick={handleProgressClick}
-          >
-            <div className="h-full bg-primary rounded-full transition-all duration-100"
-              style={{ width: `${progress}%` }} />
+          <div className="relative h-2 flex items-center">
+            {/* Track background */}
+            <div className="absolute inset-0 bg-secondary rounded-full" />
+            {/* Filled portion */}
+            <div
+              className="absolute left-0 top-0 h-full bg-primary rounded-full pointer-events-none"
+              style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+            />
+            {/* Native range input — invisible but handles all drag/click/touch */}
+            <input
+              type="range"
+              min={0}
+              max={duration || 0}
+              step={0.1}
+              value={currentTime}
+              onChange={handleScrub}
+              className="absolute inset-0 w-full opacity-0 cursor-pointer h-full"
+              style={{ WebkitAppearance: "none" }}
+            />
           </div>
           <div className="flex justify-between mt-1.5 text-xs text-muted-foreground">
             <span>{formatTime(currentTime)}</span>
@@ -309,9 +342,9 @@ export function PodcastPlayer() {
 
         {/* Buttons */}
         <div className="flex items-center justify-center gap-8">
-          <button onClick={skipBack} className="text-muted-foreground hover:text-foreground transition-colors flex flex-col items-center gap-1">
+          <button onClick={skipBack} className="text-muted-foreground hover:text-foreground transition-colors flex flex-col items-center gap-0.5">
             <SkipBack className="w-7 h-7" />
-            <span className="text-xs text-muted-foreground">15</span>
+            <span className="text-xs">15</span>
           </button>
           <button
             onClick={togglePlay}
@@ -325,9 +358,9 @@ export function PodcastPlayer() {
               : <Play className="w-7 h-7 fill-current" />
             }
           </button>
-          <button onClick={skipForward} className="text-muted-foreground hover:text-foreground transition-colors flex flex-col items-center gap-1">
+          <button onClick={skipForward} className="text-muted-foreground hover:text-foreground transition-colors flex flex-col items-center gap-0.5">
             <SkipForward className="w-7 h-7" />
-            <span className="text-xs text-muted-foreground">15</span>
+            <span className="text-xs">15</span>
           </button>
         </div>
       </div>
