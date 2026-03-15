@@ -177,19 +177,24 @@ def download_video(url: str, tmpdir: str) -> Optional[str]:
         "format": "worstvideo[ext=mp4]/worst[ext=mp4]/worst",
         "outtmpl": f"{tmpdir}/video.%(ext)s",
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0"
         },
         "quiet": True,
         "no_warnings": True,
+        "retries": 1,
     }
     try:
         with yt_dlp.YoutubeDL(video_opts) as ydl:
             ydl.download([url])
 
         video_files = sorted(glob.glob(f"{tmpdir}/video.*"))
-        return video_files[0] if video_files else None
-    except Exception as e:
-        print(f"Video download failed: {e}")
+        if not video_files:
+            print(f"No video files downloaded for {url}")
+            return None
+        return video_files[0]
+
+    except DownloadError as e:
+        print(f"Video download failed for {url}: {e}")
         return None
 
 def transcribe_with_google(audio_path: str):
