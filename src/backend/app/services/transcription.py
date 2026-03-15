@@ -12,6 +12,11 @@ from google.oauth2 import service_account
 
 from yt_dlp.utils import DownloadError
 
+from google.cloud import speech
+
+def get_speech_client():
+    return speech.SpeechClient()
+
 def extract_video_data(url: str) -> Dict:
     """
     Extract transcript, caption, and metadata from a video URL.
@@ -205,19 +210,12 @@ def _download_video(url, tmpdir):
 
     return f"{tmpdir}/video.mp4"
 
-def transcribe_with_google(audio_path: str):
+def transcribe_with_google(audio_path: str) -> str:
+    """
+    Transcribe a WAV audio file using Google Speech-to-Text.
+    """
+    client = get_speech_client()
 
-    if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
-        service_account_info = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS"])
-        credentials = service_account.Credentials.from_service_account_info(
-            service_account_info
-        )
-    else:
-        credentials = service_account.Credentials.from_service_account_file(
-            "service_account.json"
-        )
-
-    client = speech.SpeechClient(credentials=credentials)
     with open(audio_path, "rb") as f:
         audio_content = f.read()
 
@@ -231,9 +229,5 @@ def transcribe_with_google(audio_path: str):
 
     response = client.recognize(config=config, audio=audio)
 
-    transcript = ""
-
-    for result in response.results:
-        transcript += result.alternatives[0].transcript + " "
-
+    transcript = " ".join(result.alternatives[0].transcript for result in response.results)
     return transcript.strip()

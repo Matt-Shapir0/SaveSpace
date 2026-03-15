@@ -1,20 +1,23 @@
-import google.generativeai as genai
+import google.genai as genai
 from app.config import settings
 
-genai.configure(api_key=settings.google_api_key)
-
-model = genai.GenerativeModel("gemini-3-flash-preview")
+client = genai.Client(api_key=settings.google_api_key)
+MODEL_NAME = "gemini-1.5-flash"
 
 def get_gemini_client():
     """Returns the configured Gemini model. Used by the chat router."""
-    return model
+    return client
 
-def generate_podcast_script(text):
+def generate_podcast_script(text: str) -> str:
     prompt = f"""
-    Turn the following TikTok content into a motivational podcast segment.
+Turn the following TikTok content into a motivational podcast segment.
 
-    {text}
-    """
-    response = model.generate_content(prompt)
+{text}
+"""
+
+    response = client.models.generate_content(
+        model=MODEL_NAME,
+        contents=prompt
+    )
 
     return response.text

@@ -11,10 +11,11 @@ Design choices:
 import json
 import re
 from datetime import datetime
-from app.ai.gemini_client import model
+from app.ai.gemini_client import client
 from app.database import get_supabase
 
 WORDS_PER_SECOND = 130 / 60  # ≈ 2.17 words/second
+MODEL_NAME = "gemini-1.5-flash"
 
 TONE_INSTRUCTIONS = {
     "gentle": (
@@ -161,7 +162,7 @@ RULES:
 
 Begin the script now:"""
 
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(model=MODEL_NAME,contents=prompt)
     script = response.text.strip()
 
     # 6. Generate a title separately (short, evocative)
@@ -170,7 +171,7 @@ Output ONLY the title, nothing else.
 
 Script beginning: {script[:200]}"""
 
-    title_response = model.generate_content(title_prompt)
+    title_response = client.models.generate_content(model=MODEL_NAME, contents=title_prompt)
     title = title_response.text.strip().strip('"').strip("'")
 
     # 7. Build segments for karaoke
