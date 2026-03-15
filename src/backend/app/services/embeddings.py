@@ -5,7 +5,7 @@ from typing import Optional
 
 client = genai.Client(api_key=settings.google_api_key)
 
-EMBED_MODEL = "gemini-embedding-001"
+EMBED_MODEL = "text-embedding-3-small"
 
 CHUNK_SIZE = 200
 CHUNK_OVERLAP = 50
