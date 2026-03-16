@@ -30,7 +30,7 @@ def embed_query(text: str) -> Optional[list[float]]:
     Embed a user's query for similarity search.
     """
     try:
-        result = client.models.embed_content(model=EMBED_MODEL,contents=text)
+        result = client.models.embed_content(model=EMBED_MODEL,contents=text, config=types.EmbedContentConfig(output_dimensionality=1536))
         return result.embeddings[0].values
     except Exception as e:
         print(f"Query embedding failed: {e}")
