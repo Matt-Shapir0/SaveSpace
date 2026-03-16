@@ -91,6 +91,7 @@ def retrieve_relevant_chunks(user_id: str, query: str, top_k: int = 5) -> list[d
     Retrieve semantically similar chunks via pgvector RPC.
     """
     query_vector = embed_query(query)
+    # print("Query vector length:", len(query_vector))
     if query_vector is None:
         return []
     db = get_supabase()
@@ -102,6 +103,8 @@ def retrieve_relevant_chunks(user_id: str, query: str, top_k: int = 5) -> list[d
                 "match_count": top_k
             }
         ).execute()
+        # print("RPC result:", result)
+        # print("RPC data:", result.data)
         return result.data or []
     except Exception as e:
         print(f"Chunk retrieval failed: {e}")

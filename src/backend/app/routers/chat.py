@@ -104,7 +104,8 @@ async def chat(payload: ChatRequest):
     relevant_chunks = []
     if last_user_msg and len(last_user_msg) > 5:
         chunks = retrieve_relevant_chunks(payload.user_id, last_user_msg, top_k=5)
-        relevant_chunks = [c for c in chunks if (c.get("similarity") or 0) > 0.6]
+        # relevant_chunks = [c for c in chunks if (c.get("similarity") or 0) > 0.6]
+        relevant_chunks = chunks[:5]
     print("Retrieved chunks:", len(relevant_chunks))
 
     system_prompt = _build_system_prompt(
