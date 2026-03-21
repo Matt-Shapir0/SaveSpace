@@ -36,7 +36,6 @@ def embed_query(text: str) -> Optional[list[float]]:
         print(f"Query embedding failed: {e}")
         return None
 
-
 def _chunk_text(text: str) -> list[str]:
     """
     Split text into overlapping chunks.
@@ -44,10 +43,12 @@ def _chunk_text(text: str) -> list[str]:
     text = text.strip()
     if not text:
         return []
-
     if len(text) <= CHUNK_SIZE:
         return [text]
 
+    stride = CHUNK_SIZE - CHUNK_OVERLAP
+    if stride <= 0:
+        raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE")
     chunks = []
     start = 0
     while start < len(text):
@@ -56,13 +57,14 @@ def _chunk_text(text: str) -> list[str]:
         last_period = chunk.rfind(". ")
         if last_period > CHUNK_SIZE // 2:
             chunk = chunk[: last_period + 1]
+
         chunk = chunk.strip()
         if chunk:
             chunks.append(chunk)
-        step = max(1, len(chunk) - CHUNK_OVERLAP)
-        start += step
+        if end == len(text):
+            break
+        start += stride
     return chunks
-
 
 def embed_and_store_video(video_id: str, user_id: str, full_text: str) -> int:
     """
