@@ -61,7 +61,7 @@ def process_video(video_id: str, url: str, user_id: str) -> dict:
 
         update_data = {"status": "done", "transcript": transcript, "caption": caption,
             "ocr_text": ocr_text, "full_text": full_text, "theme_tags": themes,
-            "processed_at": datetime.utcnow().isoformat()}
+            "processed_at": datetime.now().isoformat()}
         db.table("videos").update(update_data).eq("id", video_id).execute()
 
         if themes:
@@ -70,6 +70,8 @@ def process_video(video_id: str, url: str, user_id: str) -> dict:
         if full_text:
             print(f"[{video_id}] Embedding chunks for RAG...")
             embed_and_store_video(video_id, user_id, full_text)
+        else:
+            print(f"[{video_id}] No text to embed.")
 
         print(f"[{video_id}] ✅ Complete — themes: {themes}")
         return update_data

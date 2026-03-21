@@ -41,30 +41,40 @@ def _chunk_text(text: str) -> list[str]:
     """
     Split text into overlapping chunks.
     """
+    text = text.strip()
+    if not text:
+        return []
+
     if len(text) <= CHUNK_SIZE:
         return [text]
 
     chunks = []
     start = 0
     while start < len(text):
-        end = start + CHUNK_SIZE
+        end = min(start + CHUNK_SIZE, len(text))
         chunk = text[start:end]
         last_period = chunk.rfind(". ")
         if last_period > CHUNK_SIZE // 2:
             chunk = chunk[: last_period + 1]
-        chunks.append(chunk.strip())
-        start += len(chunk) - CHUNK_OVERLAP
-
-    return [c for c in chunks if len(c) > 20]
+        chunk = chunk.strip()
+        if chunk:
+            chunks.append(chunk)
+        step = max(1, len(chunk) - CHUNK_OVERLAP)
+        start += step
+    return chunks
 
 
 def embed_and_store_video(video_id: str, user_id: str, full_text: str) -> int:
     """
     Chunk text, embed, and store in Supabase.
     """
-    if not full_text or len(full_text.strip()) < 30:
+    if not full_text:
         print(f"[{video_id}] Text too short to embed.")
         return 0
+    
+    if len(full_text) < 30:
+        # make it one chunk if very short
+        full_text = full_text.replace("\n", " ")
 
     db = get_supabase()
     chunks = _chunk_text(full_text)
