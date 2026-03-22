@@ -14,10 +14,11 @@ import tempfile
 import os
 from typing import Optional
 from PIL import Image
+import PIL.ImageEnhance as enhance
 import numpy as np
 
 
-def extract_text_from_frames(url: str, num_frames: int = 8) -> Optional[str]:
+def extract_text_from_frames(url: str, num_frames: int = 4) -> Optional[str]:
     """
     Sample N frames from a video and OCR each one.
     Returns concatenated unique text found across all frames.
@@ -50,7 +51,7 @@ def extract_text_from_frames(url: str, num_frames: int = 8) -> Optional[str]:
 def _download_video(url: str, tmpdir: str) -> Optional[str]:
     """Download video at lowest quality (we only need frames, not quality)."""
     video_opts = {
-        "format": "worstvideo[ext=mp4]/worst[ext=mp4]/worst",  # Lowest quality
+        "format": "best[ext=mp4]/worst[ext=mp4]/worst",  # Higher quality
         "outtmpl": f"{tmpdir}/video.%(ext)s",
         "quiet": True,
         "no_warnings": True,
@@ -103,27 +104,23 @@ def _ocr_frame(frame) -> Optional[str]:
     width, height = pil_image.size
     pil_image = pil_image.resize((width * 2, height * 2), Image.LANCZOS)
     
-    # 2. Convert to grayscale
+    # 2. Convert to grayscale & contrast
     gray = pil_image.convert("L")
-    
-    # 3. Increase contrast
-    import PIL.ImageEnhance as enhance
-    gray = enhance.Contrast(gray).enhance(2.0)
+    gray = enhance.Contrast(gray).enhance(2.5)
     
     # Run Tesseract OCR
     try:
         text = pytesseract.image_to_string(
             gray,
-            config="--psm 3 --oem 3"  # psm 3 = auto page segmentation
+            config="--psm 6 --oem 3"  # psm 3 = auto page segmentation
         ).strip()
-        
+        text = " ".join(text.split())
+
         # Filter out very short or noisy results
         if len(text) < 5:
             return None
-        
-        # Remove excessive whitespace
-        text = " ".join(text.split())
         return text
+    
     except Exception as e:
         print(f"OCR error on frame: {e}")
         return None
