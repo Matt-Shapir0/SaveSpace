@@ -5,6 +5,7 @@ import type { UserPreferences } from "@/src/lib/api";
 const profileKey = (userId: string) => `echofeed_profile_${userId}`;
 const nameKey = (userId: string) => `echofeed_name_${userId}`;
 const preferencesKey = "userPreferences";
+const likedEpisodesKey = (userId: string) => `liked_episodes_${userId}`;
 
 export async function getHasProfile(userId: string) {
   const value = await AsyncStorage.getItem(profileKey(userId));
@@ -45,4 +46,33 @@ export async function getStoredFirstName(userId: string | null) {
   }
 
   return AsyncStorage.getItem(nameKey(userId));
+}
+
+export async function getLikedEpisodes(userId: string | null) {
+  if (!userId) {
+    return [];
+  }
+
+  const value = await AsyncStorage.getItem(likedEpisodesKey(userId));
+
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function toggleLikedEpisode(userId: string, episodeId: string) {
+  const current = await getLikedEpisodes(userId);
+  const next = current.includes(episodeId)
+    ? current.filter((id) => id !== episodeId)
+    : [...current, episodeId];
+
+  await AsyncStorage.setItem(likedEpisodesKey(userId), JSON.stringify(next));
+  return next;
 }
