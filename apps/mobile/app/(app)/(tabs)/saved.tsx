@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -137,7 +138,25 @@ function AddVideoInput({
   );
 }
 
-function CollectionFilterCard({
+function AlbumPreview({
+  color,
+  accent,
+}: {
+  color: string;
+  accent: string;
+}) {
+  return (
+    <View style={styles.albumPreview}>
+      <View style={[styles.albumTileLarge, { backgroundColor: `${color}55` }]} />
+      <View style={styles.albumPreviewColumn}>
+        <View style={[styles.albumTileSmall, { backgroundColor: `${accent}66` }]} />
+        <View style={[styles.albumTileSmall, { backgroundColor: `${color}33` }]} />
+      </View>
+    </View>
+  );
+}
+
+function CollectionAlbumCard({
   label,
   count,
   subtitle,
@@ -154,17 +173,17 @@ function CollectionFilterCard({
 }) {
   return (
     <Pressable
-      style={[
-        styles.collectionCard,
-        active && styles.collectionCardActive,
-        { borderColor: active ? color : colors.border },
-      ]}
+      style={[styles.albumCard, active && styles.albumCardActive]}
       onPress={onPress}
     >
-      <View style={[styles.collectionDot, { backgroundColor: color }]} />
-      <Text style={styles.collectionName}>{label}</Text>
-      <Text style={styles.collectionCount}>{count} items</Text>
-      <Text style={styles.collectionSubtitle}>{subtitle}</Text>
+      <AlbumPreview color={color} accent={colors.surface} />
+      <Text style={styles.albumTitle} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={styles.albumMeta}>{count} posts</Text>
+      <Text style={styles.albumSubtitle} numberOfLines={2}>
+        {subtitle}
+      </Text>
     </Pressable>
   );
 }
@@ -264,12 +283,7 @@ function VideoCard({
             size={16}
             color={activeCollectionContainsVideo ? colors.text : activeCollection.color}
           />
-          <Text
-            style={[
-              styles.collectionActionText,
-              activeCollectionContainsVideo && styles.collectionActionTextActive,
-            ]}
-          >
+          <Text style={styles.collectionActionText}>
             {activeCollectionContainsVideo
               ? `Remove from ${activeCollection.name}`
               : `Add to ${activeCollection.name}`}
@@ -308,7 +322,7 @@ export default function SavedScreen() {
   const [collectionName, setCollectionName] = useState("");
   const [collectionDescription, setCollectionDescription] = useState("");
   const [creatingCollection, setCreatingCollection] = useState(false);
-  const [showCollectionForm, setShowCollectionForm] = useState(false);
+  const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -451,7 +465,7 @@ export default function SavedScreen() {
       setActiveCollectionId(nextCollections[0]?.id ?? "all");
       setCollectionName("");
       setCollectionDescription("");
-      setShowCollectionForm(false);
+      setShowCollectionModal(false);
     } finally {
       setCreatingCollection(false);
     }
@@ -488,86 +502,36 @@ export default function SavedScreen() {
 
       {userId ? <AddVideoInput userId={userId} onAdded={() => loadData({ silent: true })} /> : null}
 
-      <View style={styles.organizeCard}>
-        <View style={styles.collectionHeader}>
-          <View style={styles.collectionHeaderCopy}>
+      <View style={styles.collectionsCard}>
+        <View style={styles.collectionsHeader}>
+          <View style={styles.collectionsHeaderCopy}>
             <Text style={styles.sectionTitle}>Collections</Text>
-            <Text style={styles.organizeBody}>
-              Create curated buckets now. They save locally for the frontend until backend support lands.
-            </Text>
+            <Text style={styles.collectionsBody}>Save into curated albums you can build out over time.</Text>
           </View>
-          <Pressable
-            style={styles.inlineAddButton}
-            onPress={() => setShowCollectionForm((current) => !current)}
-          >
-            <Ionicons name={showCollectionForm ? "close-outline" : "add-outline"} size={18} color={colors.primary} />
+          <Pressable style={styles.collectionPlusButton} onPress={() => setShowCollectionModal(true)}>
+            <Ionicons name="add" size={20} color={colors.text} />
           </Pressable>
         </View>
 
-        {showCollectionForm ? (
-          <View style={styles.collectionForm}>
-            <TextInput
-              placeholder="Collection name"
-              placeholderTextColor={colors.muted}
-              style={styles.input}
-              value={collectionName}
-              onChangeText={setCollectionName}
-            />
-            <TextInput
-              placeholder="What should this collection focus on?"
-              placeholderTextColor={colors.muted}
-              style={styles.input}
-              value={collectionDescription}
-              onChangeText={setCollectionDescription}
-            />
-            <View style={styles.addActions}>
-              <Pressable
-                style={[
-                  styles.primaryButton,
-                  (!collectionName.trim() || creatingCollection) && styles.buttonDisabled,
-                ]}
-                onPress={handleCreateCollection}
-                disabled={!collectionName.trim() || creatingCollection}
-              >
-                {creatingCollection ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>Create Collection</Text>
-                )}
-              </Pressable>
-              <Pressable
-                style={styles.ghostButton}
-                onPress={() => {
-                  setShowCollectionForm(false);
-                  setCollectionName("");
-                  setCollectionDescription("");
-                }}
-              >
-                <Text style={styles.ghostButtonText}>Cancel</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : null}
-
-        <View style={styles.collectionGrid}>
-          <CollectionFilterCard
-            label="All saved"
+        <View style={styles.albumGrid}>
+          <CollectionAlbumCard
+            label="All posts"
             count={videos.length}
             subtitle="Everything in your source library"
             color={colors.primary}
             active={activeCollectionId === "all"}
             onPress={() => setActiveCollectionId("all")}
           />
-          <CollectionFilterCard
+          <CollectionAlbumCard
             label="Unassigned"
             count={videos.filter((video) => !assignedVideoIds.has(video.id)).length}
-            subtitle="Posts not in a collection yet"
+            subtitle="Posts waiting to be organized"
             color={colors.muted}
             active={activeCollectionId === "unassigned"}
             onPress={() => setActiveCollectionId("unassigned")}
           />
           {collections.map((collection) => (
-            <CollectionFilterCard
+            <CollectionAlbumCard
               key={collection.id}
               label={collection.name}
               count={collection.videoIds.length}
@@ -578,7 +542,9 @@ export default function SavedScreen() {
             />
           ))}
         </View>
+      </View>
 
+      <View style={styles.organizeCard}>
         <Text style={styles.filterLabel}>Source</Text>
         <View style={styles.filterRow}>
           {sourceOptions.map((option) => (
@@ -618,9 +584,9 @@ export default function SavedScreen() {
 
       {activeCollection ? (
         <View style={styles.collectionHintCard}>
-          <Text style={styles.collectionHintTitle}>{activeCollection.name} is active</Text>
+          <Text style={styles.collectionHintTitle}>{activeCollection.name} is open</Text>
           <Text style={styles.collectionHintBody}>
-            Tap each saved post below to add or remove it from this collection.
+            Tap saved posts below to add or remove them from this collection.
           </Text>
         </View>
       ) : null}
@@ -651,6 +617,63 @@ export default function SavedScreen() {
           ))}
         </View>
       )}
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={showCollectionModal}
+        onRequestClose={() => setShowCollectionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setShowCollectionModal(false)} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>New collection</Text>
+            <Text style={styles.modalBody}>
+              Create a collection to organize saved posts before collection-based generation is wired on the backend.
+            </Text>
+            <TextInput
+              placeholder="Collection name"
+              placeholderTextColor={colors.muted}
+              style={styles.input}
+              value={collectionName}
+              onChangeText={setCollectionName}
+            />
+            <TextInput
+              placeholder="Short description"
+              placeholderTextColor={colors.muted}
+              style={styles.input}
+              value={collectionDescription}
+              onChangeText={setCollectionDescription}
+            />
+            <View style={styles.addActions}>
+              <Pressable
+                style={[
+                  styles.primaryButton,
+                  (!collectionName.trim() || creatingCollection) && styles.buttonDisabled,
+                ]}
+                onPress={handleCreateCollection}
+                disabled={!collectionName.trim() || creatingCollection}
+              >
+                {creatingCollection ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Create</Text>
+                )}
+              </Pressable>
+              <Pressable
+                style={styles.ghostButton}
+                onPress={() => {
+                  setShowCollectionModal(false);
+                  setCollectionName("");
+                  setCollectionDescription("");
+                }}
+              >
+                <Text style={styles.ghostButtonText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -734,6 +757,86 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ghostButtonText: { color: colors.text, fontWeight: "600" },
+  collectionsCard: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 24,
+    padding: 18,
+    gap: 14,
+  },
+  collectionsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "center",
+  },
+  collectionsHeaderCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  collectionsBody: {
+    color: colors.muted,
+    lineHeight: 20,
+  },
+  collectionPlusButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  albumGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  albumCard: {
+    width: "47%",
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    padding: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  albumCardActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  albumPreview: {
+    flexDirection: "row",
+    gap: 6,
+    aspectRatio: 1,
+  },
+  albumTileLarge: {
+    flex: 1.2,
+    borderRadius: 16,
+  },
+  albumPreviewColumn: {
+    flex: 0.8,
+    gap: 6,
+  },
+  albumTileSmall: {
+    flex: 1,
+    borderRadius: 14,
+  },
+  albumTitle: {
+    color: colors.text,
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  albumMeta: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  albumSubtitle: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
   organizeCard: {
     backgroundColor: colors.card,
     borderWidth: 1,
@@ -742,33 +845,6 @@ const styles = StyleSheet.create({
     padding: 18,
     gap: 12,
   },
-  collectionHeader: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
-  collectionHeaderCopy: { flex: 1, gap: 4 },
-  organizeBody: { color: colors.muted, lineHeight: 20 },
-  inlineAddButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.primarySoft,
-  },
-  collectionForm: { gap: 10 },
-  collectionGrid: { gap: 10 },
-  collectionCard: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 14,
-    gap: 4,
-  },
-  collectionCardActive: {
-    backgroundColor: colors.primarySoft,
-  },
-  collectionDot: { width: 12, height: 12, borderRadius: 6 },
-  collectionName: { color: colors.text, fontWeight: "700", fontSize: 16 },
-  collectionCount: { color: colors.text, fontWeight: "600" },
-  collectionSubtitle: { color: colors.muted, lineHeight: 18 },
   filterLabel: { color: colors.text, fontWeight: "600", marginTop: 4 },
   filterRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   filterChip: {
@@ -845,7 +921,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   collectionActionText: { color: colors.text, fontWeight: "600" },
-  collectionActionTextActive: { color: colors.text },
   error: { color: colors.danger, fontSize: 13 },
   emptyState: {
     backgroundColor: colors.card,
@@ -860,5 +935,31 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 34 },
   emptyTitle: { color: colors.text, fontSize: 18, fontWeight: "700" },
   emptyBody: { color: colors.muted, lineHeight: 20, textAlign: "center" },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(45, 33, 24, 0.35)",
+  },
+  modalCard: {
+    backgroundColor: colors.card,
+    borderRadius: 28,
+    padding: 20,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  modalBody: {
+    color: colors.muted,
+    lineHeight: 20,
+  },
   buttonDisabled: { opacity: 0.6 },
 });

@@ -27,6 +27,7 @@ export default function AppLayout() {
       }}
     >
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="generation-preferences" />
       <Stack.Screen name="insights" />
       <Stack.Screen name="podcast/[id]" />
     </Stack>

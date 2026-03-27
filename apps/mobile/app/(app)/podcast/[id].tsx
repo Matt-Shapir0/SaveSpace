@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
   Pressable,
@@ -17,6 +18,12 @@ import { colors, themeColors, type ThemeId } from "@/src/lib/theme";
 
 const POLL_INTERVAL_MS = 5000;
 
+const COVER_IMAGES = [
+  "https://images.unsplash.com/photo-1758874572918-178c7f8e74df?w=1080&q=80",
+  "https://images.unsplash.com/photo-1745970347554-854e886c5685?w=1080&q=80",
+  "https://images.unsplash.com/photo-1761590206515-1816e5123df9?w=1080&q=80",
+];
+
 function formatTime(seconds: number) {
   if (!seconds || Number.isNaN(seconds)) {
     return "0:00";
@@ -27,25 +34,59 @@ function formatTime(seconds: number) {
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }
 
-function getActiveSegmentIndex(
-  segments: Episode["segments"],
-  currentTime: number,
-  audioDuration: number
-) {
+function scaleSegments(segments: Episode["segments"], audioDuration: number) {
   if (!segments.length) {
-    return -1;
+    return [];
   }
 
   const estimatedTotal = segments[segments.length - 1]?.end_time || 1;
   const scale = audioDuration > 0 ? audioDuration / estimatedTotal : 1;
 
+  return segments.map((segment) => ({
+    ...segment,
+    start_time: segment.start_time * scale,
+    end_time: segment.end_time * scale,
+  }));
+}
+
+function getActiveSegmentIndex(segments: Episode["segments"], currentTime: number) {
+  if (!segments.length) {
+    return -1;
+  }
+
   for (let index = segments.length - 1; index >= 0; index -= 1) {
-    if (currentTime >= segments[index].start_time * scale) {
+    if (currentTime >= segments[index].start_time) {
       return index;
     }
   }
 
   return -1;
+}
+
+function TranscriptSegment({
+  segment,
+  isActive,
+  isPast,
+  onPress,
+}: {
+  segment: Episode["segments"][number];
+  isActive: boolean;
+  isPast: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable style={styles.transcriptLine} onPress={onPress}>
+      <Text
+        style={[
+          styles.transcriptText,
+          isPast && styles.transcriptTextPast,
+          isActive && styles.transcriptTextActive,
+        ]}
+      >
+        {segment.text}
+      </Text>
+    </Pressable>
+  );
 }
 
 export default function PodcastScreen() {
@@ -132,9 +173,13 @@ export default function PodcastScreen() {
 
   const duration = status.duration || episode?.audio_duration || 0;
   const progress = duration > 0 ? Math.min(status.currentTime / duration, 1) : 0;
+  const scaledSegments = useMemo(
+    () => scaleSegments(episode?.segments ?? [], duration),
+    [duration, episode?.segments]
+  );
   const activeSegmentIndex = useMemo(
-    () => getActiveSegmentIndex(episode?.segments ?? [], status.currentTime, duration),
-    [duration, episode?.segments, status.currentTime]
+    () => getActiveSegmentIndex(scaledSegments, status.currentTime),
+    [scaledSegments, status.currentTime]
   );
 
   function togglePlayback() {
@@ -175,6 +220,7 @@ export default function PodcastScreen() {
   return (
     <Screen>
       <Pressable style={styles.backButton} onPress={() => router.back()}>
+        <Ionicons name="chevron-back" size={18} color={colors.primary} />
         <Text style={styles.backButtonText}>Back</Text>
       </Pressable>
 
@@ -248,19 +294,28 @@ export default function PodcastScreen() {
 
             <View style={styles.controlsRow}>
               <Pressable style={styles.secondaryControl} onPress={() => skipBy(-15)}>
-                <Text style={styles.secondaryControlText}>-15</Text>
+                <Ionicons name="play-back" size={22} color={colors.text} />
+                <Text style={styles.secondaryControlText}>15</Text>
               </Pressable>
               <Pressable
                 style={[styles.playButton, (!episode.audio_url || !status.isLoaded) && styles.buttonDisabled]}
                 onPress={togglePlayback}
                 disabled={!episode.audio_url || !status.isLoaded}
               >
-                <Text style={styles.playButtonText}>
-                  {status.playing ? "Pause" : status.isBuffering ? "Loading..." : "Play"}
-                </Text>
+                {status.isBuffering ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Ionicons
+                    name={status.playing ? "pause" : "play"}
+                    size={28}
+                    color="#fff"
+                    style={status.playing ? undefined : styles.playIcon}
+                  />
+                )}
               </Pressable>
               <Pressable style={styles.secondaryControl} onPress={() => skipBy(15)}>
-                <Text style={styles.secondaryControlText}>+15</Text>
+                <Ionicons name="play-forward" size={22} color={colors.text} />
+                <Text style={styles.secondaryControlText}>15</Text>
               </Pressable>
             </View>
 
@@ -269,29 +324,26 @@ export default function PodcastScreen() {
             ) : null}
           </View>
 
-          {episode.segments?.length ? (
-            <View style={styles.card}>
+          {scaledSegments.length ? (
+            <View style={styles.transcriptSection}>
               <Text style={styles.sectionTitle}>Transcript</Text>
-              <View style={styles.segmentStack}>
-                {episode.segments.map((segment, index) => {
-                  const isActive = index === activeSegmentIndex;
-
-                  return (
-                    <Pressable
-                      key={`${segment.start_time}-${index}`}
-                      style={[styles.segmentCard, isActive && styles.segmentCardActive]}
-                      onPress={() => player.seekTo(segment.start_time).catch(() => {})}
-                    >
-                      <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>
-                        {segment.text}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+              <Text style={styles.transcriptHint}>
+                Tap any line to jump playback. The active line highlights word by word as the audio plays.
+              </Text>
+              <View style={styles.transcriptStack}>
+                {scaledSegments.map((segment, index) => (
+                  <TranscriptSegment
+                    key={`${segment.start_time}-${index}`}
+                    segment={segment}
+                    isActive={index === activeSegmentIndex}
+                    isPast={index < activeSegmentIndex}
+                    onPress={() => player.seekTo(segment.start_time).catch(() => {})}
+                  />
+                ))}
               </View>
             </View>
           ) : episode.script ? (
-            <View style={styles.card}>
+            <View style={styles.transcriptSection}>
               <Text style={styles.sectionTitle}>Script</Text>
               <Text style={styles.body}>{episode.script}</Text>
             </View>
@@ -305,6 +357,9 @@ export default function PodcastScreen() {
 const styles = StyleSheet.create({
   backButton: {
     alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   backButtonText: {
     color: colors.primary,
@@ -384,32 +439,34 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    gap: 18,
   },
   secondaryControl: {
-    minWidth: 68,
+    width: 58,
+    height: 58,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: "#fff",
-    borderRadius: 18,
-    paddingVertical: 14,
+    borderRadius: 20,
     alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
   },
   secondaryControlText: {
     color: colors.text,
     fontWeight: "700",
+    fontSize: 11,
   },
   playButton: {
-    flex: 1,
+    width: 76,
+    height: 76,
     backgroundColor: colors.primary,
-    borderRadius: 18,
-    paddingVertical: 16,
+    borderRadius: 38,
     alignItems: "center",
+    justifyContent: "center",
   },
-  playButtonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 16,
+  playIcon: {
+    marginLeft: 4,
   },
   card: {
     backgroundColor: colors.card,
@@ -432,26 +489,31 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 12,
   },
-  segmentStack: {
+  transcriptSection: {
     gap: 10,
+    paddingTop: 6,
   },
-  segmentCard: {
-    borderRadius: 18,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-  },
-  segmentCardActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
-  segmentText: {
+  transcriptHint: {
     color: colors.muted,
-    lineHeight: 22,
+    lineHeight: 20,
   },
-  segmentTextActive: {
-    color: colors.text,
+  transcriptStack: {
+    gap: 12,
+  },
+  transcriptLine: {
+    paddingVertical: 2,
+  },
+  transcriptText: {
+    fontSize: 18,
+    lineHeight: 31,
+    letterSpacing: -0.2,
+    color: `${colors.muted}99`,
+  },
+  transcriptTextPast: {
+    color: `${colors.muted}99`,
+  },
+  transcriptTextActive: {
+    color: colors.primary,
     fontWeight: "600",
   },
   generatingCard: {
