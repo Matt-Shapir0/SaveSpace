@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
 import { router } from "expo-router";
@@ -190,6 +190,19 @@ export default function ProfileScreen() {
       .finally(() => setLoading(false));
   }, [userId]);
 
+  function handleSignOut() {
+    Alert.alert("Sign out?", "You'll need to sign back in to access your account.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign out",
+        style: "destructive",
+        onPress: async () => {
+          await clearProfile(userId);
+          await supabase.auth.signOut();
+          router.replace("/auth");
+        },
+      },
+    ]);
   const recentWeekTheme = useMemo(
     () => getRecentThemeLabel(insights?.evolution_data, 1) ?? summary?.top_theme?.label ?? null,
     [insights?.evolution_data, summary?.top_theme?.label]
@@ -212,10 +225,29 @@ export default function ProfileScreen() {
     router.replace("/auth");
   }
 
-  async function handleResetOnboarding() {
-    await clearProfile(userId);
-    await refreshProfileState();
-    router.replace("/onboarding");
+  function handleResetOnboarding() {
+    Alert.alert("Re-run onboarding?", "This will clear your saved preferences.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Continue",
+        style: "destructive",
+        onPress: async () => {
+          await clearProfile(userId);
+          await refreshProfileState();
+          router.replace("/onboarding");
+        },
+      },
+    ]);
+  }
+
+  async function handleChangePassword() {
+    if (!email) return;
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    if (error) {
+      Alert.alert("Error", error.message);
+    } else {
+      Alert.alert("Check your email", `We sent a password reset link to ${email}.`);
+    }
   }
 
   if (loading) {
@@ -334,9 +366,25 @@ export default function ProfileScreen() {
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Account</Text>
-        <Pressable style={styles.secondaryButton} onPress={handleResetOnboarding}>
-          <Text style={styles.secondaryButtonText}>Re-run onboarding</Text>
+
+        <Pressable style={styles.rowItem} onPress={handleChangePassword}>
+          <Ionicons name="lock-closed-outline" size={18} color={colors.muted} />
+          <Text style={styles.rowItemText}>Change password</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.muted} />
         </Pressable>
+
+        <Pressable style={styles.rowItem} onPress={() => Alert.alert("Coming soon", "Notification preferences will be available in a future update.")}>
+          <Ionicons name="notifications-outline" size={18} color={colors.muted} />
+          <Text style={styles.rowItemText}>Notifications</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+        </Pressable>
+
+        <Pressable style={styles.rowItem} onPress={handleResetOnboarding}>
+          <Ionicons name="refresh-outline" size={18} color={colors.muted} />
+          <Text style={styles.rowItemText}>Re-run onboarding</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+        </Pressable>
+
         <Pressable style={styles.secondaryButton} onPress={() => router.push("/(app)/insights")}>
           <Text style={styles.secondaryButtonText}>Open full insights</Text>
         </Pressable>
@@ -579,5 +627,16 @@ const styles = StyleSheet.create({
   dangerButtonText: {
     color: "#fff",
     fontWeight: "700",
+  },
+  rowItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 4,
+  },
+  rowItemText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 15,
   },
 });

@@ -20,7 +20,7 @@ import { useAuth } from "@/src/lib/auth";
 import { colors } from "@/src/lib/theme";
 import { supabase } from "@/src/lib/supabase";
 
-type Mode = "signin" | "signup";
+type Mode = "signin" | "signup" | "reset";
 
 export default function AuthScreen() {
   const { loading: authLoading, user, hasProfile } = useAuth();
@@ -30,6 +30,7 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   if (authLoading) {
     return <LoadingScreen label="Checking your account..." />;
@@ -41,6 +42,22 @@ export default function AuthScreen() {
 
   if (user && !hasProfile) {
     return <Redirect href="/onboarding" />;
+  }
+
+  async function handleReset() {
+    if (!email.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim());
+      if (resetError) throw resetError;
+      setResetSent(true);
+    } catch (value: unknown) {
+      const message = value instanceof Error ? value.message : "Something went wrong.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleSubmit() {
@@ -115,6 +132,28 @@ export default function AuthScreen() {
     );
   }
 
+  if (resetSent) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <Text style={styles.title}>Check your email</Text>
+          <Text style={styles.subtitle}>
+            We sent a password reset link to {email.trim()}. Open it to set a new password, then come back and sign in.
+          </Text>
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={() => {
+              setResetSent(false);
+              setMode("signin");
+            }}
+          >
+            <Text style={styles.secondaryButtonText}>Back to sign in</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -159,47 +198,86 @@ export default function AuthScreen() {
                 </Pressable>
               </View>
 
-              <View style={styles.card}>
-                <TextInput
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  keyboardType="email-address"
-                  placeholder="Email address"
-                  placeholderTextColor={colors.muted}
-                  style={styles.input}
-                  value={email}
-                  onChangeText={setEmail}
-                />
-                <TextInput
-                  autoCapitalize="none"
-                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                  placeholder="Password"
-                  placeholderTextColor={colors.muted}
-                  secureTextEntry
-                  style={styles.input}
-                  value={password}
-                  onChangeText={setPassword}
-                />
+              {mode === "reset" ? (
+                <View style={styles.card}>
+                  <Text style={styles.resetHint}>
+                    Enter your email and we'll send you a link to reset your password.
+                  </Text>
+                  <TextInput
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    keyboardType="email-address"
+                    placeholder="Email address"
+                    placeholderTextColor={colors.muted}
+                    style={styles.input}
+                    value={email}
+                    onChangeText={setEmail}
+                  />
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                  <Pressable
+                    style={[styles.primaryButton, (!email.trim() || loading) && styles.buttonDisabled]}
+                    disabled={!email.trim() || loading}
+                    onPress={handleReset}
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.primaryButtonText}>Send reset link</Text>
+                    )}
+                  </Pressable>
+                  <Pressable onPress={() => { setMode("signin"); setError(null); }}>
+                    <Text style={styles.forgotText}>Back to sign in</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.card}>
+                  <TextInput
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    keyboardType="email-address"
+                    placeholder="Email address"
+                    placeholderTextColor={colors.muted}
+                    style={styles.input}
+                    value={email}
+                    onChangeText={setEmail}
+                  />
+                  <TextInput
+                    autoCapitalize="none"
+                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                    placeholder="Password"
+                    placeholderTextColor={colors.muted}
+                    secureTextEntry
+                    style={styles.input}
+                    value={password}
+                    onChangeText={setPassword}
+                  />
 
-                {error ? <Text style={styles.error}>{error}</Text> : null}
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
 
-                <Pressable
-                  style={[
-                    styles.primaryButton,
-                    (!email.trim() || !password.trim() || loading) && styles.buttonDisabled,
-                  ]}
-                  disabled={!email.trim() || !password.trim() || loading}
-                  onPress={handleSubmit}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.primaryButtonText}>
-                      {mode === "signup" ? "Create Account" : "Sign In"}
-                    </Text>
+                  <Pressable
+                    style={[
+                      styles.primaryButton,
+                      (!email.trim() || !password.trim() || loading) && styles.buttonDisabled,
+                    ]}
+                    disabled={!email.trim() || !password.trim() || loading}
+                    onPress={handleSubmit}
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.primaryButtonText}>
+                        {mode === "signup" ? "Create Account" : "Sign In"}
+                      </Text>
+                    )}
+                  </Pressable>
+
+                  {mode === "signin" && (
+                    <Pressable onPress={() => { setMode("reset"); setError(null); }}>
+                      <Text style={styles.forgotText}>Forgot password?</Text>
+                    </Pressable>
                   )}
-                </Pressable>
-              </View>
+                </View>
+              )}
             </View>
           </ScrollView>
         </TouchableWithoutFeedback>
@@ -310,5 +388,16 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
+  },
+  resetHint: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  forgotText: {
+    color: colors.muted,
+    fontSize: 13,
+    textAlign: "center",
+    textDecorationLine: "underline",
   },
 });
