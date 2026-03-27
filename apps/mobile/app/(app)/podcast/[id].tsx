@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { Image as ExpoImage } from "expo-image";
 import {
   ActivityIndicator,
   Pressable,
@@ -274,9 +275,28 @@ export default function PodcastScreen() {
           </View>
 
           <View style={styles.playerCard}>
-            <View style={styles.coverArt}>
-              <Text style={styles.coverArtText}>🎧</Text>
-            </View>
+            {episode ? (
+              (() => {
+                const maybeCover = (episode as any).cover_url || (episode as any).cover;
+                const indexHash = Math.abs(
+                  episode.id.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+                );
+                const fallback = COVER_IMAGES[indexHash % COVER_IMAGES.length];
+                const coverUri = maybeCover || fallback;
+
+                return (
+                  <ExpoImage
+                    source={{ uri: coverUri }}
+                    style={styles.coverArt}
+                    contentFit="cover"
+                  />
+                );
+              })()
+            ) : (
+              <View style={styles.coverArt}>
+                <Text style={styles.coverArtText}>🎧</Text>
+              </View>
+            )}
 
             <Pressable
               style={styles.progressTrack}

@@ -203,6 +203,8 @@ export default function ProfileScreen() {
         },
       },
     ]);
+  }
+
   const recentWeekTheme = useMemo(
     () => getRecentThemeLabel(insights?.evolution_data, 1) ?? summary?.top_theme?.label ?? null,
     [insights?.evolution_data, summary?.top_theme?.label]
@@ -219,11 +221,6 @@ export default function ProfileScreen() {
     [themeBars]
   );
 
-  async function handleSignOut() {
-    await clearProfile(userId);
-    await supabase.auth.signOut();
-    router.replace("/auth");
-  }
 
   function handleResetOnboarding() {
     Alert.alert("Re-run onboarding?", "This will clear your saved preferences.", [
@@ -270,10 +267,11 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.statsRow}>
-        <View style={styles.statCard}>
+        {/* <View style={styles.statCard1}>
           <Text style={styles.statValue}>{summary?.weeks_active ?? 1}</Text>
-          <Text style={styles.statLabel}>Weeks active</Text>
-        </View>
+          <Text style={styles.statLabel}>Weeks</Text>
+          <Text style={styles.statLabel}>active</Text>
+        </View> */}
         <View style={styles.statCard}>
           <Text style={styles.statValue}>{recentWeekTheme ?? "None yet"}</Text>
           <Text style={styles.statLabel}>Theme this week</Text>
@@ -284,22 +282,6 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      <Pressable
-        style={styles.settingsCard}
-        onPress={() => router.push("/(app)/generation-preferences")}
-      >
-        <View style={styles.settingsIconWrap}>
-          <Ionicons name="settings-outline" size={22} color={colors.primary} />
-        </View>
-        <View style={styles.settingsCopy}>
-          <Text style={styles.settingsTitle}>Generation preferences</Text>
-          <Text style={styles.settingsBody}>{formatSchedule(preferences)}</Text>
-          <Text style={styles.settingsMeta}>
-            {preferences?.autoGenerate ? "Auto-generate is on" : "Auto-generate is off"}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-      </Pressable>
 
       {weeklyTotals.length > 0 ? (
         <View style={styles.card}>
@@ -364,6 +346,23 @@ export default function ProfileScreen() {
         </View>
       ) : null}
 
+      <Pressable
+        style={styles.settingsCard}
+        onPress={() => router.push("/(app)/generation-preferences")}
+      >
+        <View style={styles.settingsIconWrap}>
+          <Ionicons name="settings-outline" size={22} color={colors.primary} />
+        </View>
+        <View style={styles.settingsCopy}>
+          <Text style={styles.settingsTitle}>Generation preferences</Text>
+          <Text style={styles.settingsBody}>{formatSchedule(preferences)}</Text>
+          <Text style={styles.settingsMeta}>
+            {preferences?.autoGenerate ? "Auto-generate is on" : "Auto-generate is off"}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+      </Pressable>
+
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Account</Text>
 
@@ -385,9 +384,9 @@ export default function ProfileScreen() {
           <Ionicons name="chevron-forward" size={16} color={colors.muted} />
         </Pressable>
 
-        <Pressable style={styles.secondaryButton} onPress={() => router.push("/(app)/insights")}>
+        {/* <Pressable style={styles.secondaryButton} onPress={() => router.push("/(app)/insights")}>
           <Text style={styles.secondaryButtonText}>Open full insights</Text>
-        </Pressable>
+        </Pressable> */}
         <Pressable style={styles.dangerButton} onPress={handleSignOut}>
           <Text style={styles.dangerButtonText}>Sign out</Text>
         </Pressable>
