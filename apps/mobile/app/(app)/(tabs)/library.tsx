@@ -5,8 +5,13 @@ import { Link, useFocusEffect } from "expo-router";
 
 import { Screen } from "@/src/components/screen";
 import { episodesApi, type EpisodeSummary } from "@/src/lib/api";
+import {
+  getLikedEpisodes,
+  getSavedCollections,
+  toggleLikedEpisode,
+  type SavedCollection,
+} from "@/src/lib/storage";
 import { colors, themeColors, type ThemeId } from "@/src/lib/theme";
-import { getLikedEpisodes, toggleLikedEpisode } from "@/src/lib/storage";
 import { useUser } from "@/src/lib/useUser";
 
 const COVER_EMOJIS = ["🎧", "🌅", "🪴"];
@@ -42,6 +47,22 @@ function ThemePill({ themeId }: { themeId: string }) {
         {theme.icon} {theme.name}
       </Text>
     </View>
+  );
+}
+
+function CollectionChip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable style={[styles.collectionChip, active && styles.collectionChipActive]} onPress={onPress}>
+      <Text style={[styles.collectionChipText, active && styles.collectionChipTextActive]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -160,6 +181,8 @@ export default function LibraryScreen() {
   const { userId } = useUser();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [episodes, setEpisodes] = useState<EpisodeSummary[]>([]);
+  const [collections, setCollections] = useState<SavedCollection[]>([]);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string>("all");
   const [likedEpisodes, setLikedEpisodes] = useState<string[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -178,12 +201,14 @@ export default function LibraryScreen() {
 
       try {
         setError(null);
-        const [nextEpisodes, nextLikedEpisodes] = await Promise.all([
+        const [nextEpisodes, nextLikedEpisodes, nextCollections] = await Promise.all([
           episodesApi.listByUser(userId),
           getLikedEpisodes(userId),
+          getSavedCollections(userId),
         ]);
         setEpisodes(nextEpisodes);
         setLikedEpisodes(nextLikedEpisodes);
+        setCollections(nextCollections);
       } catch {
         setError("Couldn't load your library.");
       } finally {
@@ -233,6 +258,10 @@ export default function LibraryScreen() {
   const likedSet = useMemo(() => new Set(likedEpisodes), [likedEpisodes]);
   const featuredEpisode = episodes.find((episode) => episode.status === "done") ?? null;
   const likedCount = likedEpisodes.length;
+  const selectedCollection =
+    selectedCollectionId === "all"
+      ? null
+      : collections.find((collection) => collection.id === selectedCollectionId) ?? null;
 
   async function handleDeleteEpisode(id: string) {
     await episodesApi.delete(id);
@@ -303,6 +332,36 @@ export default function LibraryScreen() {
             <Text style={styles.metricLabel}>Liked</Text>
           </View>
         </View>
+
+        <View style={styles.collectionPicker}>
+          <Text style={styles.collectionPickerLabel}>Generate from</Text>
+          <View style={styles.collectionPickerRow}>
+            <CollectionChip
+              label="All saved content"
+              active={selectedCollectionId === "all"}
+              onPress={() => setSelectedCollectionId("all")}
+            />
+            {collections.map((collection) => (
+              <CollectionChip
+                key={collection.id}
+                label={collection.name}
+                active={selectedCollectionId === collection.id}
+                onPress={() => setSelectedCollectionId(collection.id)}
+              />
+            ))}
+          </View>
+          <Text style={styles.collectionPickerHint}>
+            {selectedCollection
+              ? `${selectedCollection.videoIds.length} saved posts are currently in ${selectedCollection.name}.`
+              : "Choose a collection to preview collection-based generation in the UI."}
+          </Text>
+          {selectedCollection ? (
+            <Text style={styles.collectionPickerNote}>
+              Frontend preview: generation still uses your full saved library until collection support is added on the backend.
+            </Text>
+          ) : null}
+        </View>
+
         <Pressable
           style={[styles.generateButton, generating && styles.buttonDisabled]}
           onPress={handleGenerateEpisode}
@@ -311,7 +370,9 @@ export default function LibraryScreen() {
           {generating ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.generateButtonText}>Generate New Episode</Text>
+            <Text style={styles.generateButtonText}>
+              {selectedCollection ? `Generate from ${selectedCollection.name}` : "Generate New Episode"}
+            </Text>
           )}
         </Pressable>
       </View>
@@ -364,39 +425,166 @@ export default function LibraryScreen() {
 
 const styles = StyleSheet.create({
   loader: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   title: { fontSize: 30, fontWeight: "700", color: colors.text },
   subtitle: { color: colors.muted, fontSize: 15, lineHeight: 22, marginTop: 4, maxWidth: 280 },
   refreshButton: {
-    width: 40, height: 40, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card,
-    borderRadius: 14, alignItems: "center", justifyContent: "center",
+    width: 40,
+    height: 40,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  heroCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 24, padding: 18, gap: 14 },
+  heroCard: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 24,
+    padding: 18,
+    gap: 14,
+  },
   heroMetrics: { flexDirection: "row", gap: 10 },
-  metricCard: { flex: 1, backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: 18, padding: 14, gap: 4 },
+  metricCard: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 18,
+    padding: 14,
+    gap: 4,
+  },
   metricValue: { color: colors.primary, fontSize: 24, fontWeight: "700" },
   metricLabel: { color: colors.muted, fontSize: 12 },
-  generateButton: { backgroundColor: colors.primary, borderRadius: 18, paddingVertical: 15, alignItems: "center" },
+  collectionPicker: {
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    padding: 14,
+    gap: 10,
+  },
+  collectionPickerLabel: {
+    color: colors.text,
+    fontWeight: "700",
+  },
+  collectionPickerRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  collectionChip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#fff",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  collectionChipActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  collectionChipText: {
+    color: colors.muted,
+    fontWeight: "600",
+  },
+  collectionChipTextActive: {
+    color: colors.primary,
+  },
+  collectionPickerHint: {
+    color: colors.text,
+    fontSize: 13,
+  },
+  collectionPickerNote: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  generateButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 18,
+    paddingVertical: 15,
+    alignItems: "center",
+  },
   generateButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   featuredCard: { backgroundColor: colors.primarySoft, borderRadius: 24, padding: 18, gap: 8 },
-  featuredLabel: { color: colors.primary, fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
+  featuredLabel: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
   featuredTitle: { color: colors.text, fontSize: 20, fontWeight: "700" },
   featuredMeta: { color: colors.muted, fontSize: 13 },
-  playFeatured: { marginTop: 6, backgroundColor: colors.text, borderRadius: 16, paddingVertical: 13, alignItems: "center" },
+  playFeatured: {
+    marginTop: 6,
+    backgroundColor: colors.text,
+    borderRadius: 16,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
   playFeaturedText: { color: "#fff", fontWeight: "700" },
   stack: { gap: 12 },
-  generatingCard: { flexDirection: "row", gap: 14, alignItems: "center", backgroundColor: colors.card, borderWidth: 1, borderColor: `${colors.primary}50`, borderRadius: 22, padding: 16 },
-  generatingBadge: { width: 56, height: 56, borderRadius: 18, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
+  generatingCard: {
+    flexDirection: "row",
+    gap: 14,
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: `${colors.primary}50`,
+    borderRadius: 22,
+    padding: 16,
+  },
+  generatingBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   generatingCopy: { flex: 1, gap: 4 },
   generatingTitle: { color: colors.text, fontWeight: "700" },
   generatingSubtitle: { color: colors.muted, fontSize: 13 },
-  failedCard: { flexDirection: "row", gap: 12, alignItems: "flex-start", justifyContent: "space-between", backgroundColor: colors.card, borderWidth: 1, borderColor: `${colors.danger}40`, borderRadius: 22, padding: 16 },
+  failedCard: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: `${colors.danger}40`,
+    borderRadius: 22,
+    padding: 16,
+  },
   failedCopy: { flex: 1, gap: 4 },
   failedTitle: { color: colors.danger, fontWeight: "700" },
   failedSubtitle: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   episodeWrap: { position: "relative" },
-  episodeCard: { flexDirection: "row", gap: 14, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 22, padding: 16, paddingRight: 88 },
-  coverBadge: { width: 68, height: 68, borderRadius: 20, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
+  episodeCard: {
+    flexDirection: "row",
+    gap: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 22,
+    padding: 16,
+    paddingRight: 88,
+  },
+  coverBadge: {
+    width: 68,
+    height: 68,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   coverBadgeText: { fontSize: 30 },
   episodeCopy: { flex: 1, gap: 6 },
   episodeTitle: { color: colors.text, fontWeight: "700", fontSize: 16 },
@@ -404,10 +592,25 @@ const styles = StyleSheet.create({
   episodeActions: { position: "absolute", top: 16, right: 12, flexDirection: "row", gap: 4 },
   iconButton: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
   themeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  themePill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: "#fff" },
+  themePill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "#fff",
+  },
   themePillText: { fontSize: 12, fontWeight: "600" },
   error: { color: colors.danger, fontSize: 13 },
-  emptyState: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 28, paddingHorizontal: 24, paddingVertical: 28, alignItems: "center", gap: 8 },
+  emptyState: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    alignItems: "center",
+    gap: 8,
+  },
   emptyEmoji: { fontSize: 34 },
   emptyTitle: { color: colors.text, fontSize: 18, fontWeight: "700" },
   emptyBody: { color: colors.muted, lineHeight: 20, textAlign: "center" },

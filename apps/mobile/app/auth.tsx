@@ -1,10 +1,15 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -112,76 +117,93 @@ export default function AuthScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.brand}>SaveSpace</Text>
-          <Text style={styles.subtitle}>Your saved content, turned into a personal podcast.</Text>
-        </View>
-
-        <View style={styles.switcher}>
-          <Pressable
-            style={[styles.switchButton, mode === "signin" && styles.switchButtonActive]}
-            onPress={() => {
-              setMode("signin");
-              setError(null);
-            }}
+      <KeyboardAvoidingView
+        style={styles.keyboard}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           >
-            <Text style={[styles.switchText, mode === "signin" && styles.switchTextActive]}>
-              Sign In
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.switchButton, mode === "signup" && styles.switchButtonActive]}
-            onPress={() => {
-              setMode("signup");
-              setError(null);
-            }}
-          >
-            <Text style={[styles.switchText, mode === "signup" && styles.switchTextActive]}>
-              Sign Up
-            </Text>
-          </Pressable>
-        </View>
+            <View style={styles.container}>
+              <View style={styles.header}>
+                <Text style={styles.brand}>SaveSpace</Text>
+                <Text style={styles.subtitle}>Your saved content, turned into a personal podcast.</Text>
+              </View>
 
-        <View style={styles.card}>
-          <TextInput
-            autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            placeholder="Email address"
-            placeholderTextColor={colors.muted}
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-          />
-          <TextInput
-            autoCapitalize="none"
-            autoComplete={mode === "signup" ? "new-password" : "current-password"}
-            placeholder="Password"
-            placeholderTextColor={colors.muted}
-            secureTextEntry
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-          />
+              <View style={styles.switcher}>
+                <Pressable
+                  style={[styles.switchButton, mode === "signin" && styles.switchButtonActive]}
+                  onPress={() => {
+                    setMode("signin");
+                    setError(null);
+                  }}
+                >
+                  <Text style={[styles.switchText, mode === "signin" && styles.switchTextActive]}>
+                    Sign In
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.switchButton, mode === "signup" && styles.switchButtonActive]}
+                  onPress={() => {
+                    setMode("signup");
+                    setError(null);
+                  }}
+                >
+                  <Text style={[styles.switchText, mode === "signup" && styles.switchTextActive]}>
+                    Sign Up
+                  </Text>
+                </Pressable>
+              </View>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+              <View style={styles.card}>
+                <TextInput
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  placeholder="Email address"
+                  placeholderTextColor={colors.muted}
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                />
+                <TextInput
+                  autoCapitalize="none"
+                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                  placeholder="Password"
+                  placeholderTextColor={colors.muted}
+                  secureTextEntry
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                />
 
-          <Pressable
-            style={[styles.primaryButton, (!email.trim() || !password.trim() || loading) && styles.buttonDisabled]}
-            disabled={!email.trim() || !password.trim() || loading}
-            onPress={handleSubmit}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryButtonText}>
-                {mode === "signup" ? "Create Account" : "Sign In"}
-              </Text>
-            )}
-          </Pressable>
-        </View>
-      </View>
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+
+                <Pressable
+                  style={[
+                    styles.primaryButton,
+                    (!email.trim() || !password.trim() || loading) && styles.buttonDisabled,
+                  ]}
+                  disabled={!email.trim() || !password.trim() || loading}
+                  onPress={handleSubmit}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>
+                      {mode === "signup" ? "Create Account" : "Sign In"}
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -191,10 +213,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  keyboard: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
   container: {
     flex: 1,
     justifyContent: "center",
     paddingHorizontal: 24,
+    paddingVertical: 24,
     gap: 20,
   },
   header: {
