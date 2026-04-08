@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException
 from app.models import VideoCreate, VideoResponse
 from app.database import get_supabase
 from app.worker.tasks import process_video_task
-import re
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 router = APIRouter()
 
@@ -19,21 +19,47 @@ def detect_source(url: str) -> str:
     else:
         return "unknown"
 
+def normalize_url(url: str) -> str:
+    parsed = urlparse(url.strip())
+
+    if not parsed.scheme or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="Invalid URL")
+
+    host = parsed.netloc.lower()
+    clean_query = ""
+
+    if "youtube.com" in host:
+        allowed_query = [(key, value) for key, value in parse_qsl(parsed.query) if key == "v"]
+        clean_query = urlencode(allowed_query)
+
+    return urlunparse(
+        (
+            parsed.scheme.lower(),
+            host,
+            parsed.path.rstrip("/"),
+            "",
+            clean_query,
+            "",
+        )
+    )
+
 @router.post("/", response_model=VideoResponse, status_code=202)
 async def create_video(payload: VideoCreate):
     db = get_supabase()
+    normalized_url = normalize_url(payload.url)
     
     try:
-        source = detect_source(payload.url)
+        source = detect_source(normalized_url)
     except Exception as e:
         print("detect_source failed:", e)
         raise HTTPException(status_code=400, detail="Invalid URL source")
 
-    # Check if video already exists
+    # Check if this user already saved the normalized URL.
     existing = (
         db.table("videos")
         .select("*")
-        .eq("url", payload.url)
+        .eq("user_id", payload.user_id)
+        .eq("url", normalized_url)
         .limit(1)
         .execute()
     )
@@ -45,15 +71,19 @@ async def create_video(payload: VideoCreate):
             url=v["url"],
             status=v["status"],
             source=v.get("source"),
+            title=v.get("title"),
+            author=v.get("author"),
+            thumbnail_url=v.get("thumbnail_url"),
             transcript=v.get("transcript"),
             caption=v.get("caption"),
+            error_message=v.get("error_message"),
             created_at=v.get("created_at"),
         )
 
     # Otherwise create a new video
     result = db.table("videos").insert({
         "user_id": payload.user_id,
-        "url": payload.url,
+        "url": normalized_url,
         "source": source,
         "status": "pending",
     }).execute()
@@ -65,13 +95,17 @@ async def create_video(payload: VideoCreate):
     video = result.data[0]
     video_id = video["id"]
 
-    process_video_task.delay(video_id, payload.url, payload.user_id)
+    process_video_task.delay(video_id, normalized_url, payload.user_id)
 
     return VideoResponse(
         id=video_id,
-        url=payload.url,
+        url=normalized_url,
         status="pending",
         source=source,
+        title=video.get("title"),
+        author=video.get("author"),
+        thumbnail_url=video.get("thumbnail_url"),
+        error_message=video.get("error_message"),
         created_at=video["created_at"]
     )
 
@@ -90,8 +124,12 @@ def get_video(video_id: str):
         url=v["url"],
         status=v["status"],
         source=v.get("source"),
+        title=v.get("title"),
+        author=v.get("author"),
+        thumbnail_url=v.get("thumbnail_url"),
         transcript=v.get("transcript"),
         caption=v.get("caption"),
+        error_message=v.get("error_message"),
         created_at=v.get("created_at"),
     )
 
@@ -101,7 +139,7 @@ def get_user_videos(user_id: str):
     db = get_supabase()
     result = (
         db.table("videos")
-        .select("id, url, source, status, caption, created_at")
+        .select("id, url, source, status, title, author, thumbnail_url, caption, transcript, theme_tags, error_message, created_at")
         .eq("user_id", user_id)
         .order("created_at", desc=True)
         .execute()

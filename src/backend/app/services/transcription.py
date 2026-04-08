@@ -36,6 +36,7 @@ def extract_video_data(url: str) -> Dict:
                 "caption": None,
                 "title": None,
                 "author": None,
+                "thumbnail_url": None,
                 "duration": None,
             }
         transcript = _try_native_transcript(url, tmpdir)
@@ -52,6 +53,7 @@ def extract_video_data(url: str) -> Dict:
             "caption": metadata.get("description") or metadata.get("title"),
             "title": metadata.get("title"),
             "author": metadata.get("uploader"),
+            "thumbnail_url": metadata.get("thumbnail"),
             "duration": metadata.get("duration"),
         }
 
@@ -175,6 +177,7 @@ def _get_metadata(url: str) -> Dict:
                 "title": info.get("title", ""),
                 "description": info.get("description", ""),
                 "uploader": info.get("uploader", ""),
+                "thumbnail": info.get("thumbnail", ""),
                 "duration": info.get("duration", 0),
             }
     except Exception as e:

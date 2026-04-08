@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import {
   ActivityIndicator,
   Alert,
@@ -51,6 +52,41 @@ function ThemePill({ themeId }: { themeId: string }) {
       </Text>
     </View>
   );
+}
+
+function getStatusMeta(status: Video["status"], errorMessage: string | null) {
+  if (status === "done") {
+    return {
+      label: "Saved",
+      detail: "Ready to use in your library.",
+      backgroundColor: "#e3f1e7",
+      textColor: colors.success,
+    };
+  }
+
+  if (status === "failed") {
+    return {
+      label: "Failed",
+      detail: errorMessage || "We couldn't process this post. Try sharing it again later.",
+      backgroundColor: "#f7e1dc",
+      textColor: colors.danger,
+    };
+  }
+
+  return {
+    label: status === "pending" ? "Queued" : "Processing",
+    detail: "Still processing. This updates automatically.",
+    backgroundColor: colors.primarySoft,
+    textColor: colors.primary,
+  };
+}
+
+function formatCreatorHandle(author: string | null) {
+  if (!author) {
+    return null;
+  }
+
+  return author.startsWith("@") ? author : `@${author}`;
 }
 
 function AddVideoInput({
@@ -205,6 +241,9 @@ function VideoCard({
   const videoCollections = collections.filter((collection) => collection.videoIds.includes(video.id));
   const activeCollectionContainsVideo =
     activeCollection ? activeCollection.videoIds.includes(video.id) : false;
+  const statusMeta = getStatusMeta(video.status, video.error_message);
+  const creatorHandle = formatCreatorHandle(video.author);
+  const headline = video.title || video.caption || video.url;
 
   async function handleDelete() {
     Alert.alert("Delete saved item?", "This will remove the saved post from your source library.", [
@@ -244,7 +283,23 @@ function VideoCard({
         </View>
       </View>
 
-      <Text style={styles.videoTitle}>{video.caption || video.url}</Text>
+      {video.thumbnail_url ? (
+        <Image source={{ uri: video.thumbnail_url }} style={styles.thumbnail} contentFit="cover" />
+      ) : null}
+
+      <View style={styles.videoStatusRow}>
+        <View style={[styles.statusBadge, { backgroundColor: statusMeta.backgroundColor }]}>
+          <Text style={[styles.statusBadgeText, { color: statusMeta.textColor }]}>{statusMeta.label}</Text>
+        </View>
+        {creatorHandle ? <Text style={styles.creatorHandle}>{creatorHandle}</Text> : null}
+      </View>
+
+      <Text style={styles.videoTitle}>{headline}</Text>
+      {video.caption && video.title && video.caption !== video.title ? (
+        <Text style={styles.videoDescription} numberOfLines={3}>
+          {video.caption}
+        </Text>
+      ) : null}
       {video.transcript ? <Text style={styles.videoExcerpt}>{video.transcript.slice(0, 120)}...</Text> : null}
 
       <View style={styles.themeRow}>
@@ -291,9 +346,7 @@ function VideoCard({
         </Pressable>
       ) : null}
 
-      <Text style={styles.inlineNote}>
-        {video.status === "done" ? "Saved" : "Still processing. This updates automatically."}
-      </Text>
+      <Text style={styles.inlineNote}>{statusMeta.detail}</Text>
     </View>
   );
 }
@@ -885,7 +938,34 @@ const styles = StyleSheet.create({
   videoMetaActions: { flexDirection: "row", gap: 12, alignItems: "center" },
   linkText: { color: colors.primary, fontWeight: "600" },
   iconButton: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
+  thumbnail: {
+    width: "100%",
+    height: 180,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+  },
+  videoStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  statusBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  creatorHandle: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "600",
+  },
   videoTitle: { color: colors.text, fontWeight: "700", lineHeight: 21 },
+  videoDescription: { color: colors.text, fontSize: 13, lineHeight: 19 },
   videoExcerpt: { color: colors.muted, fontSize: 13, lineHeight: 18, fontStyle: "italic" },
   inlineNote: { color: colors.muted, fontSize: 12 },
   themeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
@@ -11,8 +11,12 @@ class VideoResponse(BaseModel):
     url: str
     status: str
     source: Optional[str] = None
+    title: Optional[str] = None
+    author: Optional[str] = None
+    thumbnail_url: Optional[str] = None
     transcript: Optional[str] = None
     caption: Optional[str] = None
+    error_message: Optional[str] = None
     created_at: Optional[datetime] = None
 
 class ProcessingStatus(BaseModel):

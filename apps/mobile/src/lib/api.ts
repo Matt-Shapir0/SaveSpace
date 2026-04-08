@@ -20,8 +20,12 @@ export type Video = {
   url: string;
   source: string | null;
   status: "pending" | "processing" | "done" | "failed";
+  title: string | null;
+  author: string | null;
+  thumbnail_url: string | null;
   transcript: string | null;
   caption: string | null;
+  error_message: string | null;
   theme_tags: string[];
   created_at: string;
 };

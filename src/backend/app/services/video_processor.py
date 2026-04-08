@@ -42,6 +42,9 @@ def process_video(video_id: str, url: str, user_id: str) -> dict:
         video_data = extract_video_data(url)
         transcript = video_data.get("transcript")
         caption = video_data.get("caption")
+        title = video_data.get("title")
+        author = video_data.get("author")
+        thumbnail_url = video_data.get("thumbnail_url")
 
         print(f"[{video_id}] Running OCR...")
         ocr_text = None
@@ -60,6 +63,7 @@ def process_video(video_id: str, url: str, user_id: str) -> dict:
         themes = extract_themes(full_text) if full_text else []
 
         update_data = {"status": "done", "transcript": transcript, "caption": caption,
+            "title": title, "author": author, "thumbnail_url": thumbnail_url,
             "ocr_text": ocr_text, "full_text": full_text, "theme_tags": themes,
             "processed_at": datetime.now().isoformat()}
         db.table("videos").update(update_data).eq("id", video_id).execute()

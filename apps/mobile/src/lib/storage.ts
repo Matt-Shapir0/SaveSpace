@@ -8,6 +8,7 @@ const preferencesKey = "userPreferences";
 const likedEpisodesKey = (userId: string) => `liked_episodes_${userId}`;
 const collectionsKey = (userId: string) => `saved_collections_${userId}`;
 const schedulePreferencesKey = (userId: string) => `schedule_preferences_${userId}`;
+const pendingSharedUrlKey = "pending_shared_url";
 
 export type SavedCollection = {
   id: string;
@@ -191,4 +192,16 @@ export async function saveSchedulePreferences(
   preferences: SchedulePreferences
 ) {
   await AsyncStorage.setItem(schedulePreferencesKey(userId), JSON.stringify(preferences));
+}
+
+export async function getPendingSharedUrl() {
+  return AsyncStorage.getItem(pendingSharedUrlKey);
+}
+
+export async function setPendingSharedUrl(url: string) {
+  await AsyncStorage.setItem(pendingSharedUrlKey, url);
+}
+
+export async function clearPendingSharedUrl() {
+  await AsyncStorage.removeItem(pendingSharedUrlKey);
 }
