@@ -8,37 +8,18 @@ Public API:
 """
 import glob
 import json
+import time
 import os
 import re
 import subprocess
-import tempfile
 from typing import Dict, Optional
-
 import yt_dlp
-from google.cloud import speech
-from google.oauth2 import service_account
-from yt_dlp.utils import DownloadError
 
-# NEW IMPORTS?  ##############################################
-import os
-import time
-import subprocess
-from typing import Optional
+# Google GenAI for STT fallback
 from google import genai
 from google.genai import types
 from app.config import settings
-
-# Initialize the modern client once
 client = genai.Client(api_key=settings.google_api_key)
-#############################################################
-
-
-def _get_speech_client():
-    if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
-        data = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS"])
-        credentials = service_account.Credentials.from_service_account_info(data)
-        return speech.SpeechClient(credentials=credentials)
-    raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS not set")
 
 
 def try_native_transcript(url: str, tmpdir: str) -> Optional[str]:
@@ -143,23 +124,6 @@ def _extract_audio(video_path: str) -> str:
         check=True,
     )
     return audio_path
-
-
-def _transcribe_with_google(audio_path: str) -> Optional[str]:
-    client = _get_speech_client()
-    with open(audio_path, "rb") as f:
-        audio_content = f.read()
-
-    audio = speech.RecognitionAudio(content=audio_content)
-    config = speech.RecognitionConfig(
-        encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-        sample_rate_hertz=16000,
-        language_code="en-US",
-    )
-    response = client.recognize(config=config, audio=audio)
-    result = " ".join(r.alternatives[0].transcript for r in response.results)
-    return result.strip() or None
-
 
 def _parse_json3(filepath: str) -> Optional[str]:
     try:
