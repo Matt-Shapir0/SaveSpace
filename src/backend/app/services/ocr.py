@@ -1,126 +1,98 @@
 """
-Extract text visible in video frames using OCR.
-This captures: on-screen text overlays, captions burned into the video,
-text shown on whiteboards, slides, etc.
-
-Useful for: motivational quotes displayed as text over video,
-bullet points, book titles shown on screen, etc.
+Service that extracts on-screen text from video frames using Gemini Vision.
 """
 import cv2
-import pytesseract
-import yt_dlp
-import glob
-import tempfile
-import os
+import base64
 from typing import Optional
-from PIL import Image
-import PIL.ImageEnhance as enhance
-import numpy as np
 
+from google import genai
+from google.genai import types
+from app.config import settings
 
-def extract_text_from_frames(url: str, num_frames: int = 4) -> Optional[str]:
+client = genai.Client(api_key=settings.google_api_key)
+
+def extract_text_from_video_path(video_path: str, num_frames: int = 2) -> Optional[str]:
     """
-    Sample N frames from a video and OCR each one.
-    Returns concatenated unique text found across all frames.
+    Sample N frames from an already-downloaded video and extract all visible
+    text using Gemini Vision in a single API call.
 
-    video_path: path to already-downloaded video (avoids re-downloading)
-    num_frames: how many frames to sample. More = more thorough but slower.
-                8 is a good balance for a 60-second TikTok.
+    Parameters:
+        video_path: local path to the video file (managed by caller's tempdir)
+        num_frames: frames to sample. 8 covers a 60s TikTok well.
+
+    Returns:
+        Clean string of all unique on-screen text, or None if nothing found.
     """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        video_path = _download_video(url, tmpdir)
-
-        frames = _sample_frames(video_path, num_frames)
-        if not frames:
-            return None
-
-        all_texts = []
-        for frame in frames:
-            text = _ocr_frame(frame)
-            if text:
-                all_texts.append(text)
-
-        if not all_texts:
-            return None
-
-        # Deduplicate — many frames will have identical overlays
-        unique_texts = list(dict.fromkeys(all_texts))
-        return " | ".join(unique_texts)
-
-
-def _download_video(url: str, tmpdir: str) -> Optional[str]:
-    """Download video at lowest quality (we only need frames, not quality)."""
-    video_opts = {
-        "format": "best[ext=mp4]/worst[ext=mp4]/worst",  # Higher quality
-        "outtmpl": f"{tmpdir}/video.%(ext)s",
-        "quiet": True,
-        "no_warnings": True,
-    }
-    try:
-        with yt_dlp.YoutubeDL(video_opts) as ydl:
-            ydl.download([url])
-        
-        video_files = glob.glob(f"{tmpdir}/video.*")
-        return video_files[0] if video_files else None
-    except Exception as e:
-        print(f"Video download for OCR failed: {e}")
+    frames_b64 = _sample_frames_as_b64(video_path, num_frames)
+    if not frames_b64:
         return None
+    return _extract_text_with_gemini(frames_b64)
 
 
-def _sample_frames(video_path: str, num_frames: int) -> list:
-    """Sample evenly-spaced frames from the video."""
+def _sample_frames_as_b64(video_path: str, num_frames: int) -> list[str]:
+    """
+    Sample evenly-spaced frames, skipping the first/last 5% of the video
+    (usually intros, outros, and watermark cards with no useful content).
+    Returns frames as base64-encoded JPEGs.
+    """
     cap = cv2.VideoCapture(video_path)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    
-    if total_frames == 0:
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    if total == 0:
         cap.release()
         return []
-    
-    # Sample evenly across the video
-    indices = [int(i * total_frames / num_frames) for i in range(num_frames)]
-    frames = []
-    
+
+    start = int(total * 0.05)
+    end = int(total * 0.95)
+    span = end - start
+
+    indices = [start + int(i * span / num_frames) for i in range(num_frames)]
+    frames_b64 = []
+
     for idx in indices:
         cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
         ret, frame = cap.read()
-        if ret:
-            frames.append(frame)
-    
+        if not ret:
+            continue
+        success, buffer = cv2.imencode(
+            ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85]
+        )
+        if success:
+            frames_b64.append(base64.b64encode(buffer).decode("utf-8"))
+
     cap.release()
-    return frames
+    return frames_b64
 
 
-def _ocr_frame(frame) -> Optional[str]:
+def _extract_text_with_gemini(frames_b64: list[str]) -> Optional[str]:
     """
-    Run OCR on a single frame.
-    Preprocesses for better accuracy on video text overlays.
+    Send all frames to Gemini Vision in one call.
+    Gemini deduplicates repeated overlays across frames naturally.
     """
-    # Convert from BGR (OpenCV) to RGB (PIL)
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    pil_image = Image.fromarray(rgb_frame)
-    
-    # Preprocessing to improve OCR on video text:
-    # 1. Scale up (text in videos is often small)
-    width, height = pil_image.size
-    pil_image = pil_image.resize((width * 2, height * 2), Image.LANCZOS)
-    
-    # 2. Convert to grayscale & contrast
-    gray = pil_image.convert("L")
-    gray = enhance.Contrast(gray).enhance(2.5)
-    
-    # Run Tesseract OCR
+    contents = [
+        types.Part.from_bytes(data=b64, mime_type="image/jpeg")
+        for b64 in frames_b64
+    ]
+    prompt = (
+        "These are frames from a Short from Video. Extract ONLY unique on-screen text overlays, titles, and callouts. Ignore UI, watermarks, and captions. "
+        "If none exist, reply with exactly: NONE. Output one item per line."
+    )
+    contents.append(types.Part.from_text(text=prompt))
+
     try:
-        text = pytesseract.image_to_string(
-            gray,
-            config="--psm 6 --oem 3"  # psm 3 = auto page segmentation
-        ).strip()
-        text = " ".join(text.split())
+        response = client.models.generate_content(
+            model="gemini-3.1-flash-lite-preview",
+            contents=contents,
+            config=types.GenerateContentConfig(temperature=0),
+        )
+        result = response.text.strip()
 
-        # Filter out very short or noisy results
-        if len(text) < 5:
+        if not result or result.upper() == "NONE":
             return None
-        return text
-    
+
+        lines = [line.strip() for line in result.splitlines() if line.strip()]
+        return " | ".join(lines) if lines else None
+
     except Exception as e:
-        print(f"OCR error on frame: {e}")
+        print(f"[OCR] Gemini vision call failed: {e}")
         return None
