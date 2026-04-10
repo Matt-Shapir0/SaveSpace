@@ -11,13 +11,13 @@ sqlalchemy==2.0.35
 celery==5.4.0
 redis==5.1.0
 
-# Video processing - may not be needed
-yt-dlp==2024.11.4
+# Video processing
+yt_dlp==2024.11.4
 
 # OCR (text from video frames)
 opencv-python-headless==4.10.0.84
-pytesseract==0.3.13
-Pillow==10.4.0
+# pytesseract==0.3.13
+# Pillow==10.4.0
 
 # Google AI
 google-genai

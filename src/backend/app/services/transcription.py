@@ -1,175 +1,126 @@
-import yt_dlp
-import os
-import json
-import glob
-import tempfile
-from typing import Optional, Dict
+"""
+Transcript extraction
 
-import tempfile
+Public API:
+    try_native_transcript(url, tmpdir)   -> Optional[str]  (no video download)
+    transcribe_from_video_path(path)     -> Optional[str]  (reuses downloaded file)
+    get_metadata(url)                    -> dict            (no video download)
+"""
+import glob
+import json
+import os
+import re
 import subprocess
+import tempfile
+from typing import Dict, Optional
+
+import yt_dlp
 from google.cloud import speech
 from google.oauth2 import service_account
 from yt_dlp.utils import DownloadError
-from google.cloud import speech
 
-def get_speech_client():
+# NEW IMPORTS?  ##############################################
+import os
+import time
+import subprocess
+from typing import Optional
+from google import genai
+from google.genai import types
+from app.config import settings
+
+# Initialize the modern client once
+client = genai.Client(api_key=settings.google_api_key)
+#############################################################
+
+
+def _get_speech_client():
     if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
         data = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS"])
-        client_email = data.get("client_email")
         credentials = service_account.Credentials.from_service_account_info(data)
         return speech.SpeechClient(credentials=credentials)
-
-def extract_video_data(url: str) -> Dict:
-    """
-    Extract transcript, caption, and metadata from a video URL.
-    Returns a dict with keys: transcript, caption, title, author, duration
-    
-    Strategy:
-    1. Try to get native subtitles/auto-captions (free, fast, accurate)
-    2. If none found, download audio and run Whisper (slower, costs money)
-    """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        video_path = _download_video(url, tmpdir)
-        if not video_path:
-            return {
-                "transcript": None,
-                "caption": None,
-                "title": None,
-                "author": None,
-                "duration": None,
-            }
-        transcript = _try_native_transcript(url, tmpdir)
-        metadata = _get_metadata(url)
-        
-        if not transcript:
-            print(f"No native transcript found for {url}. Falling back to Gemini.")
-            audio_path = _extract_audio(video_path)
-            transcript = transcribe_with_google(audio_path)
-            # transcript = 'no transcript found'
-        
-        return {
-            "transcript": transcript,
-            "caption": metadata.get("description") or metadata.get("title"),
-            "title": metadata.get("title"),
-            "author": metadata.get("uploader"),
-            "duration": metadata.get("duration"),
-        }
+    raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS not set")
 
 
-def _try_native_transcript(url: str, tmpdir: str) -> Optional[str]:
+def try_native_transcript(url: str, tmpdir: str) -> Optional[str]:
     """
-    Try to extract native subtitles or auto-generated captions.
-    TikTok and YouTube both support this well.
+    Attempt to pull native subtitles or auto-captions via yt-dlp.
+    Does NOT download the video — uses skip_download=True.
+    Returns transcript text or None if unavailable.
     """
-    subtitle_opts = {
+    opts = {
         "writesubtitles": True,
-        "writeautomaticsub": True,     # Get auto-generated captions too
-        "subtitlesformat": "json3",    # Structured format, easier to parse
-        "subtitleslangs": ["en", "en-US", "en-GB"],  # English variants
-        "skip_download": True,         # Don't download the video file
-        "outtmpl": f"{tmpdir}/video",
+        "writeautomaticsub": True,
+        "subtitlesformat": "json3",
+        "subtitleslangs": ["en", "en-US", "en-GB"],
+        "skip_download": True,
+        "outtmpl": f"{tmpdir}/subs",
         "quiet": True,
         "no_warnings": True,
     }
-
     try:
-        with yt_dlp.YoutubeDL(subtitle_opts) as ydl:
+        with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
     except Exception as e:
-        print(f"yt-dlp subtitle extraction error: {e}")
+        print(f"[transcription] Subtitle extraction error: {e}")
         return None
 
-    # Look for any subtitle file that was written
-    subtitle_files = glob.glob(f"{tmpdir}/video*.json3") + \
-                     glob.glob(f"{tmpdir}/video*.vtt") + \
-                     glob.glob(f"{tmpdir}/video*.srt")
-
-    if not subtitle_files:
+    sub_files = (
+        glob.glob(f"{tmpdir}/subs*.json3")
+        + glob.glob(f"{tmpdir}/subs*.vtt")
+        + glob.glob(f"{tmpdir}/subs*.srt")
+    )
+    if not sub_files:
         return None
 
-    # Parse the first subtitle file found
-    subtitle_file = subtitle_files[0]
-
-    if subtitle_file.endswith(".json3"):
-        return _parse_json3_subtitles(subtitle_file)
-    elif subtitle_file.endswith(".vtt"):
-        return _parse_vtt_subtitles(subtitle_file)
-    elif subtitle_file.endswith(".srt"):
-        return _parse_srt_subtitles(subtitle_file)
-
+    path = sub_files[0]
+    if path.endswith(".json3"):
+        return _parse_json3(path)
+    elif path.endswith(".vtt"):
+        return _parse_vtt(path)
+    elif path.endswith(".srt"):
+        return _parse_srt(path)
     return None
 
 
-def _parse_json3_subtitles(filepath: str) -> Optional[str]:
-    """Parse YouTube/TikTok json3 subtitle format into plain text."""
+def transcribe_from_video_path(video_path: str) -> Optional[str]:
+    """
+    High-efficiency transcription.
+    Extracts audio locally to save 87% on API costs, then uses Gemini Flash-Lite.
+    """
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        audio_path = _extract_audio(video_path)
+        audio_file = client.files.upload(file=audio_path)
+
+        while audio_file.state.name == "PROCESSING":
+            time.sleep(1)
+            audio_file = client.files.get(name=audio_file.name)
         
-        texts = []
-        for event in data.get("events", []):
-            for seg in event.get("segs", []):
-                text = seg.get("utf8", "").strip()
-                if text and text != "\n":
-                    texts.append(text)
+        if audio_file.state.name == "FAILED":
+            raise RuntimeError("Audio file processing failed on Google servers.")
         
-        return " ".join(texts).strip() or None
+        response = client.models.generate_content(
+            model="gemini-3.1-flash-lite-preview",
+            contents=[
+                audio_file,
+                "Provide a highly accurate transcript. Output only the text."
+            ],
+            config=types.GenerateContentConfig(temperature=0)
+        )
+        if os.path.exists(audio_path):
+            os.remove(audio_path) 
+        return response.text.strip() or None
     except Exception as e:
-        print(f"Error parsing json3 subtitles: {e}")
+        print(f"[transcription] Gemini STT failed: {e}")
         return None
 
 
-def _parse_vtt_subtitles(filepath: str) -> Optional[str]:
-    """Parse WebVTT subtitle format into plain text."""
+def get_metadata(url: str) -> Dict:
+    """
+    Fetch title, description, author, duration — no video download needed.
+    """
+    opts = {"skip_download": True, "quiet": True, "no_warnings": True}
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        
-        texts = []
-        skip_next = False
-        for line in lines:
-            line = line.strip()
-            if line.startswith("WEBVTT") or line.startswith("NOTE"):
-                continue
-            if "-->" in line:  # Timestamp line
-                skip_next = False
-                continue
-            if line and not skip_next:
-                # Remove HTML tags like <c> that some VTT files include
-                clean = line.replace("<c>", "").replace("</c>", "")
-                texts.append(clean)
-        
-        return " ".join(texts).strip() or None
-    except Exception as e:
-        print(f"Error parsing VTT subtitles: {e}")
-        return None
-
-
-def _parse_srt_subtitles(filepath: str) -> Optional[str]:
-    """Parse SRT subtitle format into plain text."""
-    try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            content = f.read()
-        
-        import re
-        # Remove timestamps and sequence numbers
-        content = re.sub(r'\d+\n\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}\n', '', content)
-        content = re.sub(r'\n\n+', ' ', content)
-        return content.strip() or None
-    except Exception as e:
-        print(f"Error parsing SRT subtitles: {e}")
-        return None
-
-
-def _get_metadata(url: str) -> Dict:
-    """Extract video metadata without downloading: title, description, author."""
-    meta_opts = {
-        "skip_download": True,
-        "quiet": True,
-        "no_warnings": True,
-    }
-    try:
-        with yt_dlp.YoutubeDL(meta_opts) as ydl:
+        with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
             return {
                 "title": info.get("title", ""),
@@ -178,58 +129,77 @@ def _get_metadata(url: str) -> Dict:
                 "duration": info.get("duration", 0),
             }
     except Exception as e:
-        print(f"Metadata extraction error: {e}")
+        print(f"[transcription] Metadata error: {e}")
         return {}
 
-def _extract_audio(video_path: str):
 
-    audio_path = video_path.replace(".mp4", ".wav")
-
-    subprocess.run([
-        "ffmpeg",
-        "-i", video_path,
-        "-ac", "1",
-        "-ar", "16000",
-        audio_path
-    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
+def _extract_audio(video_path: str) -> str:
+    """Extract mono 16kHz WAV from video using ffmpeg."""
+    audio_path = video_path.rsplit(".", 1)[0] + "_audio.wav"
+    subprocess.run(
+        ["ffmpeg", "-i", video_path, "-ac", "1", "-ar", "16000", audio_path],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=True,
+    )
     return audio_path
 
-def _download_video(url, tmpdir):
-    opts = {
-        "format": "worst",
-        "outtmpl": f"{tmpdir}/video.mp4",
-        "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
-        },
-    }
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([url])
-    except DownloadError as e:
-        print(f"yt-dlp failed for {url}: {e}")
-        return None
 
-    return f"{tmpdir}/video.mp4"
-
-def transcribe_with_google(audio_path: str) -> str:
-    """
-    Transcribe a WAV audio file using Google Speech-to-Text.
-    """
-    client = get_speech_client()
-
+def _transcribe_with_google(audio_path: str) -> Optional[str]:
+    client = _get_speech_client()
     with open(audio_path, "rb") as f:
         audio_content = f.read()
 
     audio = speech.RecognitionAudio(content=audio_content)
-
     config = speech.RecognitionConfig(
         encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
         sample_rate_hertz=16000,
         language_code="en-US",
     )
-
     response = client.recognize(config=config, audio=audio)
+    result = " ".join(r.alternatives[0].transcript for r in response.results)
+    return result.strip() or None
 
-    transcript = " ".join(result.alternatives[0].transcript for result in response.results)
-    return transcript.strip()
+
+def _parse_json3(filepath: str) -> Optional[str]:
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        texts = [
+            seg.get("utf8", "").strip()
+            for event in data.get("events", [])
+            for seg in event.get("segs", [])
+        ]
+        result = " ".join(t for t in texts if t and t != "\n").strip()
+        return result or None
+    except Exception as e:
+        print(f"[transcription] json3 parse error: {e}")
+        return None
+
+
+def _parse_vtt(filepath: str) -> Optional[str]:
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        texts = []
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("WEBVTT") or line.startswith("NOTE") or "-->" in line:
+                continue
+            texts.append(line.replace("<c>", "").replace("</c>", ""))
+        return " ".join(texts).strip() or None
+    except Exception as e:
+        print(f"[transcription] VTT parse error: {e}")
+        return None
+
+
+def _parse_srt(filepath: str) -> Optional[str]:
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+        content = re.sub(r"\d+\n\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}\n", "", content)
+        content = re.sub(r"\n\n+", " ", content)
+        return content.strip() or None
+    except Exception as e:
+        print(f"[transcription] SRT parse error: {e}")
+        return None
