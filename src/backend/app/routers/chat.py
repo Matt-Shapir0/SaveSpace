@@ -169,7 +169,7 @@ async def chat(payload: ChatRequest):
             contents=contents,
             config={
                 "temperature": 0.85,
-                "max_output_tokens": 300,
+                # "max_output_tokens": 300,
                 "system_instruction": system_prompt,
             },
         )
