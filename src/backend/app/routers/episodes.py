@@ -9,17 +9,18 @@ import json
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
+
 from app.database import get_supabase
 from app.services.podcast_generator import generate_podcast_script
 from app.services.tts import generate_audio, upload_audio_to_storage
 
 router = APIRouter()
 
-# Background Task 
+# Background Task
 def _run_generation(episode_id: str, user_id: str):
     """
     Full pipeline: script → TTS → upload → update DB.
-    Runs in a background thread so the HTTP response returns immediately.
+    Runs in a background thread >> HTTP response returns immediately.
     """
     db = get_supabase()
 
