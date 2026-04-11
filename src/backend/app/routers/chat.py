@@ -170,7 +170,7 @@ async def chat(payload: ChatRequest):
             config={
                 "temperature": 0.85,
                 "max_output_tokens": 300,
-                "system_instructions": system_prompt,
+                "system_instruction": system_prompt,
             },
         )
         reply = response.text.strip()
